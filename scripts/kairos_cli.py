@@ -259,24 +259,41 @@ TASKS_TEMPLATE = """# Implementation Tasks (TDD Breakdown): {name}
   - **Command:** Verify entire test suite passes without regressions
 """
 
+def sanitize_identifier(name, default="kairos_task"):
+    """Strictly sanitize task, spec, and branch names against path traversal and git command injection."""
+    if not name:
+        return default
+    # Strip directory parts to block path traversal
+    base_name = os.path.basename(name.strip().replace("\\", "/"))
+    # Allow only alphanumeric, underscores and hyphens
+    clean = re.sub(r"[^a-zA-Z0-9_\-]", "_", base_name).strip("._-")
+    clean = re.sub(r"^-+", "", clean)
+    return clean or default
+
 def cmd_spec(args):
     root = find_repo_root()
     state = load_state(root)
-    name = args.name.strip().replace(" ", "_").lower()
+    name = sanitize_identifier(args.name)
     change_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{name}"
     
     k_dir = get_kairos_dir(root)
-    change_dir = k_dir / "changes" / change_id
+    changes_root = (k_dir / "changes").resolve()
+    change_dir = (k_dir / "changes" / change_id).resolve()
+
+    # Strict path traversal check
+    if not change_dir.is_relative_to(changes_root):
+        raise ValueError(f"Path traversal detected: {args.name}")
+
     change_dir.mkdir(parents=True, exist_ok=True)
 
     date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     mode = state.get("mode", "beta")
     author = os.environ.get("USER", "engineer")
 
-    (change_dir / "proposal.md").write_text(PROPOSAL_TEMPLATE.format(name=args.name, change_id=change_id, date=date_str, mode=mode, author=author), encoding="utf-8")
-    (change_dir / "specs.md").write_text(SPECS_TEMPLATE.format(name=args.name, change_id=change_id), encoding="utf-8")
-    (change_dir / "design.md").write_text(DESIGN_TEMPLATE.format(name=args.name), encoding="utf-8")
-    (change_dir / "tasks.md").write_text(TASKS_TEMPLATE.format(name=args.name), encoding="utf-8")
+    (change_dir / "proposal.md").write_text(PROPOSAL_TEMPLATE.format(name=name, change_id=change_id, date=date_str, mode=mode, author=author), encoding="utf-8")
+    (change_dir / "specs.md").write_text(SPECS_TEMPLATE.format(name=name, change_id=change_id), encoding="utf-8")
+    (change_dir / "design.md").write_text(DESIGN_TEMPLATE.format(name=name), encoding="utf-8")
+    (change_dir / "tasks.md").write_text(TASKS_TEMPLATE.format(name=name), encoding="utf-8")
     (change_dir / "evidence.md").write_text(f"# Evidence Audit Table: {name}\n\n| Item | Requisito | Comando Executado | Resultado Observado | Status |\n| :--- | :--- | :--- | :--- | :--- |\n", encoding="utf-8")
 
     state["active_change"] = change_id
@@ -303,9 +320,14 @@ def cmd_worktree(args):
     action = args.action
 
     if action == "create":
-        name = args.name or state.get("active_change") or "kairos_task"
+        raw_name = args.name or state.get("active_change") or "kairos_task"
+        name = sanitize_identifier(raw_name)
         branch_name = f"kairos/{name}"
-        worktree_path = get_kairos_dir(root) / "worktrees" / name
+        worktrees_root = (get_kairos_dir(root) / "worktrees").resolve()
+        worktree_path = (worktrees_root / name).resolve()
+
+        if not worktree_path.is_relative_to(worktrees_root):
+            raise ValueError(f"Path traversal detected in worktree: {args.name}")
 
         if worktree_path.exists():
             print(f"⚠️ Worktree already exists at {worktree_path}")
@@ -365,7 +387,7 @@ def cmd_worktree(args):
 
 FRAUD_PATTERNS = {
     "weakened_test_skip": (
-        r"(\btest\.skip\b|\bxit\b|\bfit\b|@pytest\.mark\.skip|\.skip\(|\bdescribe\.skip\b|(#|//)\s*(assert\b|expect\()|__import__\(['\"]pytest['\"]\)\.skip)",
+        r"(\btest\.skip\b|\bxit\b|\bfit\b|\bfdescribe\b|\.only\(|\btest\.only\b|\bit\.only\b|\bdescribe\.only\b|@pytest\.mark\.skip|@pytest\.mark\.xfail|\bpytest\.xfail\b|\.skip\(|\bdescribe\.skip\b|(#|//)\s*(assert\b|expect\()|__import__\(['\"]pytest['\"]\)\.skip)",
         "Test skipped, disabled or commented out"
     ),
     "silent_failure_empty_catch": (
@@ -375,6 +397,10 @@ FRAUD_PATTERNS = {
     "phantom_stub": (
         r"(def\s+\w+\s*\(.*\)\s*:\s*(pass|\.\.\.|return\s+None|return\s+\{\}|return\s+\[\]|return\s+['\"]['\"])|function\s+\w+\s*\(.*\)\s*\{\s*(return\s+null;|return\s+undefined;|return\s+\{\};)?\s*\}|throw\s+new\s+NotImplementedError)",
         "Stub or unfinished function body"
+    ),
+    "tautological_assertion": (
+        r"^\s*(assert\s+(True|1\s*==\s*1|True\s*==\s*True|['\"][a-zA-Z0-9]+['\"]\s*==\s*['\"][a-zA-Z0-9]+['\"])|expect\((true|1)\)\.to(Be|Equal)\((true|1)\))",
+        "Tautological or meaningless assertion (assert True / assert 1 == 1)"
     )
 }
 
@@ -389,13 +415,23 @@ def scan_diff_text(diff_text):
     lines = diff_text.splitlines()
     
     current_file = ""
+    old_file = ""
     file_added_lines = {}
     file_deleted_asserts = {}
     file_added_asserts = {}
+    file_deleted_tests = {}
+    file_added_tests = {}
 
     for line in lines:
+        if line.startswith("--- a/"):
+            old_file = line[6:].strip()
+            continue
         if line.startswith("+++ b/"):
             current_file = line[6:].strip()
+            continue
+        elif line.startswith("+++ /dev/null"):
+            # Whole file was deleted
+            current_file = old_file
             continue
 
         # Skip non-code files
@@ -406,19 +442,29 @@ def scan_diff_text(diff_text):
             file_added_lines[current_file] = []
             file_deleted_asserts[current_file] = 0
             file_added_asserts[current_file] = 0
+            file_deleted_tests[current_file] = 0
+            file_added_tests[current_file] = 0
 
         if line.startswith("+") and not line.startswith("+++"):
             code_line = line[1:].rstrip()
             file_added_lines[current_file].append(code_line)
             # Count added assertions
-            if re.search(r"^\s*(assert\b|expect\(|self\.assert\w+)", code_line):
+            if re.search(r"^\s*(await\s+)?(assert\b|expect\(|self\.assert\w+|mock\.\w*assert)", code_line):
                 file_added_asserts[current_file] += 1
+            # Count added test functions
+            if re.search(r"^\s*(def\s+test_\w+|it\s*\(|test\s*\()", code_line):
+                file_added_tests[current_file] += 1
 
             # Single-line checks
             stripped_code = code_line.strip()
+            # Skip embedded diff text fixtures inside test files (lines whose source text begins with '+')
+            if stripped_code.startswith("+"):
+                continue
             is_comment = stripped_code.startswith("#") or stripped_code.startswith("//") or stripped_code.startswith('"""') or stripped_code.startswith("'''") or stripped_code.startswith("*")
             for key, (pattern, desc) in FRAUD_PATTERNS.items():
-                if is_comment and key in ("silent_failure_empty_catch", "phantom_stub"):
+                if is_comment and key in ("silent_failure_empty_catch", "phantom_stub", "tautological_assertion"):
+                    continue
+                if is_comment and key == "weakened_test_skip" and not re.search(r"(#|//)\s*(assert\b|expect\()", stripped_code):
                     continue
                 if re.search(pattern, stripped_code):
                     violations.append({
@@ -431,8 +477,11 @@ def scan_diff_text(diff_text):
         elif line.startswith("-") and not line.startswith("---"):
             code_line = line[1:].rstrip()
             # Count deleted assertions
-            if re.search(r"^\s*(assert\b|expect\(|self\.assert\w+)", code_line):
+            if re.search(r"^\s*(await\s+)?(assert\b|expect\(|self\.assert\w+|mock\.\w*assert)", code_line):
                 file_deleted_asserts[current_file] += 1
+            # Count deleted test functions
+            if re.search(r"^\s*(def\s+test_\w+|it\s*\(|test\s*\()", code_line):
+                file_deleted_tests[current_file] += 1
 
     # Check for net assert deletions per file (prevents false positives on assert refactoring)
     for fname, del_count in file_deleted_asserts.items():
@@ -443,6 +492,17 @@ def scan_diff_text(diff_text):
                 "line": f"Deleted {del_count} assertions vs {add_count} added",
                 "fraud_type": "assert_deletion",
                 "description": f"Net assertion deletion detected ({del_count - add_count} assertions removed without replacement)"
+            })
+
+    # Check for net test function deletions per file
+    for fname, del_t in file_deleted_tests.items():
+        add_t = file_added_tests.get(fname, 0)
+        if del_t > add_t:
+            violations.append({
+                "file": fname,
+                "line": f"Deleted {del_t} test functions vs {add_t} added",
+                "fraud_type": "weakened_test_skip",
+                "description": f"Net test function deletion detected ({del_t - add_t} test functions deleted without replacement)"
             })
 
     # Multiline block scanner: comment-tolerant, whitespace-tolerant
@@ -729,6 +789,8 @@ def cmd_token(args):
     state = load_state(root)
     action = args.action
     if action == "add":
+        if args.count <= 0:
+            raise ValueError(f"Token count must be a positive integer, got: {args.count}")
         state["total_tokens_consumed"] = state.get("total_tokens_consumed", 0) + args.count
         save_state(state, root)
         print(f"✅ Added {args.count:,} tokens. Total consumed: {state['total_tokens_consumed']:,} tokens.")
@@ -775,14 +837,22 @@ def cmd_rollback(args=None):
 MUTATION_OPS = [
     (r"(?<![!=<>])==(?!=)", "!="),
     (r"!=", "=="),
+    (r"===", "!=="),
+    (r"!==", "==="),
     (r">=", "<"),
     (r"<=", ">"),
+    (r"&&", "||"),
+    (r"\|\|", "&&"),
     (r"(?<!\+)\+(?!\+)", "-"),
     (r"(?<!\-)\-(?!\-)", "+"),
     (r"\bTrue\b", "False"),
     (r"\bFalse\b", "True"),
+    (r"\btrue\b", "false"),
+    (r"\bfalse\b", "true"),
     (r"\breturn True\b", "return False"),
     (r"\breturn False\b", "return True"),
+    (r"\breturn true\b", "return false"),
+    (r"\breturn false\b", "return true"),
 ]
 
 def cmd_mutate(args):
@@ -799,6 +869,7 @@ def cmd_mutate(args):
 
     test_cmd = args.test
     max_mutants = getattr(args, "max_mutants", 10) or 10
+    timeout_sec = getattr(args, "timeout", 15) or 15
 
     original_content = target_path.read_text(encoding="utf-8")
     shutil.copy2(target_path, bak_path)
@@ -836,7 +907,8 @@ def cmd_mutate(args):
     print(f"🧬 KAIROS K-MUTANT ENGINE: MUTATION TESTING FOR [{target_path.name}]")
     print("=================================================================")
     print(f"• Generated Mutants: {len(mutations_generated)}")
-    print(f"• Test Command:     {test_cmd}\n")
+    print(f"• Test Command:     {test_cmd}")
+    print(f"• Timeout per Run:  {timeout_sec}s\n")
 
     killed = 0
     survived = 0
@@ -844,13 +916,17 @@ def cmd_mutate(args):
     try:
         for idx, (mutant_content, desc) in enumerate(mutations_generated, 1):
             target_path.write_text(mutant_content, encoding="utf-8")
-            res = subprocess.run(test_cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            if res.returncode != 0:
+            try:
+                res = subprocess.run(test_cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=timeout_sec)
+                if res.returncode != 0:
+                    killed += 1
+                    print(f"  [{idx}/{len(mutations_generated)}] 💀 KILLED:   {desc}")
+                else:
+                    survived += 1
+                    print(f"  [{idx}/{len(mutations_generated)}] ⚠️  SURVIVED: {desc} (Weak Test!)")
+            except subprocess.TimeoutExpired:
                 killed += 1
-                print(f"  [{idx}/{len(mutations_generated)}] 💀 KILLED:   {desc}")
-            else:
-                survived += 1
-                print(f"  [{idx}/{len(mutations_generated)}] ⚠️  SURVIVED: {desc} (Weak Test!)")
+                print(f"  [{idx}/{len(mutations_generated)}] 💀 KILLED (TIMEOUT): {desc}")
     finally:
         if bak_path.exists():
             shutil.copy2(bak_path, target_path)
@@ -922,6 +998,7 @@ def main():
     p_mut.add_argument("target", help="Target source file to mutate")
     p_mut.add_argument("--test", required=True, help="Test command to run for each mutant")
     p_mut.add_argument("--max-mutants", type=int, default=10, help="Max mutants to test")
+    p_mut.add_argument("--timeout", type=int, default=15, help="Timeout in seconds per mutant run (prevents infinite loop hang)")
 
     args = parser.parse_args()
 

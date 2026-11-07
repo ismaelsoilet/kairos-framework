@@ -8,7 +8,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-from kairos_cli import cmd_status, cmd_rollback, cmd_mutate, scan_diff_text, save_state, load_state, MUTATION_OPS
+from kairos_cli import (
+    cmd_status, cmd_rollback, cmd_mutate, cmd_token, cmd_spec,
+    scan_diff_text, save_state, load_state, get_kairos_dir, MUTATION_OPS
+)
 
 class TestKairosFeatures(unittest.TestCase):
 
@@ -121,6 +124,92 @@ class TestKairosFeatures(unittest.TestCase):
         save_state(state, REPO_ROOT)
         reloaded = load_state(REPO_ROOT)
         self.assertEqual(reloaded.get("_test_atomic_key"), "atomic_value_123")
+
+    # -----------------------------------------------------------------------
+    # ROUND 2 ADVERSARIAL STRESS TESTS
+    # -----------------------------------------------------------------------
+
+    def test_spec_name_sanitization_rejects_path_traversal(self):
+        """ROUND 2 CRITICAL-01: cmd_spec must sanitize path traversal and keep files inside .kairos/changes."""
+        class MockArgs:
+            name = "../../../tmp/evil_escape_test"
+        cmd_spec(MockArgs())
+        evil_leak = Path("/tmp/evil_escape_test")
+        self.assertFalse(evil_leak.exists(), "Path traversal escaped into /tmp!")
+
+    def test_token_add_rejects_negative_values(self):
+        """ROUND 2 RISK-01: cmd_token add must reject negative values."""
+        class MockTokenArgs:
+            action = "add"
+            count = -50000
+            stage = None
+        with self.assertRaises(ValueError):
+            cmd_token(MockTokenArgs())
+
+    def test_diff_scanner_catches_focused_tests_dot_only(self):
+        """ROUND 2 RISK-03.1: it.only and describe.only silence the entire suite and must be blocked."""
+        diff = """diff --git a/tests/test_auth.ts b/tests/test_auth.ts
+--- a/tests/test_auth.ts
++++ b/tests/test_auth.ts
+@@ -10,3 +10,3 @@
+-    it('validates user token', () => {
++    it.only('validates user token', () => {
+"""
+        violations = scan_diff_text(diff)
+        fraud_types = [v["fraud_type"] for v in violations]
+        self.assertIn("weakened_test_skip", fraud_types)
+
+    def test_diff_scanner_catches_pytest_xfail(self):
+        """ROUND 2 RISK-03.2: @pytest.mark.xfail masks broken tests and must be blocked."""
+        diff = """diff --git a/tests/test_auth.py b/tests/test_auth.py
+--- a/tests/test_auth.py
++++ b/tests/test_auth.py
+@@ -5,2 +5,3 @@
++@pytest.mark.xfail(reason="temporarily failing")
+ def test_security():
+"""
+        violations = scan_diff_text(diff)
+        fraud_types = [v["fraud_type"] for v in violations]
+        self.assertIn("weakened_test_skip", fraud_types)
+
+    def test_diff_scanner_catches_completely_deleted_test_files(self):
+        """ROUND 2 RISK-02: Deleting a test file (+++ /dev/null) must detect assertion deletion."""
+        diff = """diff --git a/tests/test_critical.py b/tests/test_critical.py
+deleted file mode 100644
+--- a/tests/test_critical.py
++++ /dev/null
+@@ -1,5 +0,0 @@
+-def test_audit():
+-    assert verify_signature() is True
+-    assert check_permissions() == 200
+"""
+        violations = scan_diff_text(diff)
+        fraud_types = [v["fraud_type"] for v in violations]
+        self.assertIn("assert_deletion", fraud_types)
+
+    def test_diff_scanner_catches_tautological_assert_laundering(self):
+        """ROUND 2 RISK-04: Replacing assertions with `assert True` or `assert 1 == 1` must be blocked."""
+        diff = """diff --git a/tests/test_auth.py b/tests/test_auth.py
+--- a/tests/test_auth.py
++++ b/tests/test_auth.py
+@@ -5,2 +5,2 @@
+-    assert authenticate(bad_token) is False
++    assert True
+"""
+        violations = scan_diff_text(diff)
+        fraud_types = [v["fraud_type"] for v in violations]
+        self.assertIn("tautological_assertion", fraud_types)
+
+    def test_mutation_operators_support_js_ts_operators(self):
+        """ROUND 2 SIMPLIFY-01: Mutation engine must support JS/TS boolean (true/false) and strict equality."""
+        import re
+        sample_js = "const isValid = true;\nif (status === 200 && isAuth) return false;\n"
+        matched = False
+        for pattern, repl in MUTATION_OPS:
+            if re.search(pattern, sample_js):
+                matched = True
+                break
+        self.assertTrue(matched, "No mutation operator matched JS `true`, `===`, `&&`, or `false`!")
 
 if __name__ == "__main__":
     unittest.main()

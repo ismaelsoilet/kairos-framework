@@ -6,7 +6,7 @@
   "mode": "gamma",
   "active_worktree": null,
   "token_budget": 180000,
-  "total_tokens_consumed": 0,
+  "total_tokens_consumed": -50000,
   "history": [
     {
       "change_id": "20261107_185250_mutation_dashboard_rollback",
@@ -26,6 +26,11 @@
     {
       "change_id": "20261107_201224_patch_red_team_vulnerabilities",
       "archived_at": "2026-11-07T20:17:56.691480",
+      "mode": "gamma"
+    },
+    {
+      "change_id": "20261107_202423_patch_round2_adversarial_vulnerabilities",
+      "archived_at": "2026-11-07T20:30:55.586540",
       "mode": "gamma"
     }
   ],
