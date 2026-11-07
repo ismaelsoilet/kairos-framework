@@ -1,0 +1,673 @@
+#!/usr/bin/env python3
+"""
+KAIROS CLI: Autonomous Agentic SDLC & Token Governance Engine
+Zero-dependency, portable Python 3 CLI for managing the Kairos lifecycle,
+delta specs, git worktrees, adversarial diff audits, and multi-harness exports.
+"""
+
+import sys
+import os
+import json
+import re
+import argparse
+import subprocess
+from pathlib import Path
+from datetime import datetime
+
+VERSION = "1.0.0"
+
+# ---------------------------------------------------------------------------
+# RISK & CLASSIFICATION MATRICES (The Elastic Dial)
+# ---------------------------------------------------------------------------
+
+ALPHA_KEYWORDS = [
+    r"\bui\b", r"\bcss\b", r"\bstyle\b", r"\bcor\b", r"\bbot[aã]o\b", r"\bbutton\b",
+    r"\btypo\b", r"\bortografi\w*\b", r"\btexto\b", r"\bcopy\b", r"\blayout\b",
+    r"\bpadding\b", r"\bmargin\b", r"\balign\b", r"\bresponsiv\w*\b", r"\bcomponente\b",
+    r"\bformat\w*\b", r"\blinter\b", r"\bicon\w*\b", r"\bvisual\b", r"\brender\b"
+]
+
+GAMMA_KEYWORDS = [
+    r"\bauth\b", r"\bautentica\w*\b", r"\blogin\b", r"\bjwt\b", r"\btoken\b", r"\bsess[aã]o\b",
+    r"\bseguran[çc]a\b", r"\bsecurity\b", r"\bpermiss\w*\b", r"\brbac\b", r"\bcrypto\b",
+    r"\bcripto\w*\b", r"\bpassword\b", r"\bsenha\b", r"\btransa[çc][aã]o\b", r"\btransaction\b",
+    r"\bpayment\b", r"\bpagamento\b", r"\bbilling\b", r"\bbanco\b", r"\bdatabase\b",
+    r"\bmigra[çc][aã]o\b", r"\bmigration\b", r"\bschema\b", r"\bquebra\b", r"\bbreaking\b",
+    r"\barquitetura\b", r"\barchitecture\b", r"\bcore\b", r"\bconcorr[êe]ncia\b", r"\brace condition\b"
+]
+
+# ---------------------------------------------------------------------------
+# CORE HELPERS
+# ---------------------------------------------------------------------------
+
+def find_repo_root():
+    """Locate the git repository root or fallback to current directory."""
+    try:
+        res = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        return Path(res.stdout.strip())
+    except Exception:
+        return Path.cwd()
+
+def get_kairos_dir(root=None):
+    if root is None:
+        root = find_repo_root()
+    return root / ".kairos"
+
+def load_state(root=None):
+    k_dir = get_kairos_dir(root)
+    state_file = k_dir / "state.json"
+    if not state_file.exists():
+        return {
+            "version": VERSION,
+            "created_at": datetime.now().isoformat(),
+            "current_stage": "IDLE",
+            "active_change": None,
+            "mode": "alpha",
+            "active_worktree": None,
+            "token_budget": 15000,
+            "total_tokens_consumed": 0,
+            "history": []
+        }
+    try:
+        with open(state_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if "current_stage" not in data:
+                data["current_stage"] = "IDLE"
+            if "total_tokens_consumed" not in data:
+                data["total_tokens_consumed"] = 0
+            return data
+    except Exception:
+        return {"error": "corrupted_state"}
+
+def save_state(state, root=None):
+    k_dir = get_kairos_dir(root)
+    k_dir.mkdir(parents=True, exist_ok=True)
+    state_file = k_dir / "state.json"
+    with open(state_file, "w", encoding="utf-8") as f:
+        json.dump(state, f, indent=2, ensure_ascii=False)
+
+# ---------------------------------------------------------------------------
+# COMMAND: INIT
+# ---------------------------------------------------------------------------
+
+def cmd_init(args):
+    root = find_repo_root()
+    k_dir = get_kairos_dir(root)
+    (k_dir / "changes").mkdir(parents=True, exist_ok=True)
+    (k_dir / "specs").mkdir(parents=True, exist_ok=True)
+    (k_dir / "worktrees").mkdir(parents=True, exist_ok=True)
+    
+    state = load_state(root)
+    save_state(state, root)
+
+    # Gitignore for worktrees and temporary state
+    gitignore = root / ".gitignore"
+    if gitignore.exists():
+        content = gitignore.read_text(encoding="utf-8")
+        if ".kairos/worktrees" not in content:
+            with open(gitignore, "a", encoding="utf-8") as f:
+                f.write("\n# KAIROS Local Isolation & State\n.kairos/worktrees/\n.kairos/active_diff.patch\n")
+
+    print(f"✅ KAIROS initialized successfully at: {k_dir}")
+    print("📁 Structure:")
+    print("   .kairos/changes/   (Active Delta Specs)")
+    print("   .kairos/specs/     (Canonical Living Specifications)")
+    print("   .kairos/worktrees/ (Isolated Execution Workspaces)")
+    print("   .kairos/state.json (Governance & Token State)")
+    return 0
+
+# ---------------------------------------------------------------------------
+# COMMAND: DIAL (The Elastic Classifier)
+# ---------------------------------------------------------------------------
+
+def cmd_dial(args):
+    prompt = " ".join(args.description).lower()
+    root = find_repo_root()
+    state = load_state(root)
+
+    # Scoring mechanism
+    alpha_score = sum(1 for p in ALPHA_KEYWORDS if re.search(p, prompt))
+    gamma_score = sum(1 for p in GAMMA_KEYWORDS if re.search(p, prompt))
+
+    if gamma_score >= 1 or args.force_gamma:
+        mode = "gamma"
+        budget = 180000
+        desc = "CRITICAL / ENTERPRISE (Full Elephant/Goldfish Spec, Subagents, Zero-Trust Audit)"
+        subagents_allowed = 3
+    elif alpha_score >= 1 and gamma_score == 0 and not args.force_beta:
+        mode = "alpha"
+        budget = 15000
+        desc = "LITE / UI (In-turn Micro-Delta, Surgical Edit, Diff Sanity Check, Zero Subagents)"
+        subagents_allowed = 0
+    else:
+        mode = "beta"
+        budget = 65000
+        desc = "STANDARD (Delta Spec in changes/, Git Worktree, TDD, Single Adversarial Check)"
+        subagents_allowed = 1
+
+    state["mode"] = mode
+    state["token_budget"] = budget
+    state["current_stage"] = "CLASSIFIED"
+    save_state(state, root)
+
+    print("=================================================================")
+    print(f"🎯 KAIROS ELASTIC DIAL CLASSIFICATION: [ MODE {mode.upper()} ]")
+    print("=================================================================")
+    print(f"• Profile:           {desc}")
+    print(f"• Token Budget Cap:  ~{budget:,} tokens (Maximum target)")
+    print(f"• Subagent Quota:    {subagents_allowed} external subagents")
+    print(f"• Pipeline Workflow:")
+
+    if mode == "alpha":
+        print("  1. Spec:  Generate 5-line Micro-Delta directly in conversation.")
+        print("  2. Build: Apply minimal surgical edit directly (no worktree required).")
+        print("  3. Check: Visual inspection + diff check for a11y/CSS pollution.")
+        print("  💡 Tip: Saves ~85% of tokens compared to full pipeline.")
+    elif mode == "beta":
+        print("  1. Spec:  Scaffold .kairos/changes/<id>/ (proposal, specs, tasks).")
+        print("  2. Build: Run in isolated worktree with strict TDD (Red -> Green -> Refactor).")
+        print("  3. Check: Verify tests & run automated diff fraud scan (`kairos audit`).")
+    else: # gamma
+        print("  1. Spec:  Comprehensive Delta Spec + spawn Goldfish reviewer (kairos_critic).")
+        print("  2. Build: Isolated worktree + multi-phase TDD + 2-stage verification.")
+        print("  3. Check: Adversarial Zero-Trust Audit (6 Frauds) + Evidence Audit Table.")
+
+    print("=================================================================")
+    return 0
+
+# ---------------------------------------------------------------------------
+# COMMAND: SPEC (Delta Spec Scaffolding)
+# ---------------------------------------------------------------------------
+
+PROPOSAL_TEMPLATE = """# Proposal: {name}
+* **ID:** {change_id}
+* **Created:** {date}
+* **Mode:** {mode}
+* **Author:** {author}
+
+## 1. Intent & Context
+<!-- Why are we doing this? What problem is being solved? -->
+
+## 2. In Scope
+- 
+
+## 3. Explicitly Out of Scope (Non-Goals)
+- 
+
+## 4. Key Risks & Operational Constraints
+- 
+"""
+
+SPECS_TEMPLATE = """# Specification & Behavioral Contracts: {name}
+* **Change ID:** {change_id}
+
+## 1. Added Behaviors (NEW)
+### REQ-01: 
+* **Given:** 
+* **When:** 
+* **Then:** 
+
+## 2. Modified Behaviors (ALTERED)
+### MOD-01: 
+* **Previous Behavior:** 
+* **New Behavior:** 
+* **Migration / Retrocompatibility:** 
+
+## 3. Removed Behaviors (DELETED)
+- None
+
+## 4. Invariants (Things that MUST NEVER break)
+- [ ] Invariant 1: 
+"""
+
+DESIGN_TEMPLATE = """# Technical Design: {name}
+
+## 1. Component Architecture & Interfaces
+<!-- Which classes, functions, or files are touched? -->
+
+## 2. Data Models / Schemas / Payloads
+```typescript
+// Define interfaces, types, or DTOs
+```
+
+## 3. Error Handling & Edge Cases
+| Edge Case | Expected System Response | HTTP / Return Code |
+| :--- | :--- | :--- |
+| Invalid input | Structured error message | 400 Bad Request |
+"""
+
+TASKS_TEMPLATE = """# Implementation Tasks (TDD Breakdown): {name}
+
+- [ ] 1. Test Setup (Red Phase)
+  - **Target:** `tests/...`
+  - **Command:** `npm test` or `pytest`
+  - **Expected Failure:** `AssertionError: Expected ... but got ...`
+- [ ] 2. Minimal Implementation (Green Phase)
+  - **Target:** `src/...`
+  - **Code:** Minimal implementation to turn Test 1 green
+- [ ] 3. Refactor Phase
+  - **Cleanup:** Remove duplicate code, verify style guides
+- [ ] 4. Verification Check
+  - **Command:** Verify entire test suite passes without regressions
+"""
+
+def cmd_spec(args):
+    root = find_repo_root()
+    state = load_state(root)
+    name = args.name.strip().replace(" ", "_").lower()
+    change_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{name}"
+    
+    k_dir = get_kairos_dir(root)
+    change_dir = k_dir / "changes" / change_id
+    change_dir.mkdir(parents=True, exist_ok=True)
+
+    date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    mode = state.get("mode", "beta")
+    author = os.environ.get("USER", "engineer")
+
+    (change_dir / "proposal.md").write_text(PROPOSAL_TEMPLATE.format(name=args.name, change_id=change_id, date=date_str, mode=mode, author=author), encoding="utf-8")
+    (change_dir / "specs.md").write_text(SPECS_TEMPLATE.format(name=args.name, change_id=change_id), encoding="utf-8")
+    (change_dir / "design.md").write_text(DESIGN_TEMPLATE.format(name=args.name), encoding="utf-8")
+    (change_dir / "tasks.md").write_text(TASKS_TEMPLATE.format(name=args.name), encoding="utf-8")
+    (change_dir / "evidence.md").write_text(f"# Evidence Audit Table: {name}\n\n| Item | Requisito | Comando Executado | Resultado Observado | Status |\n| :--- | :--- | :--- | :--- | :--- |\n", encoding="utf-8")
+
+    state["active_change"] = change_id
+    state["current_stage"] = "SPECIFYING"
+    save_state(state, root)
+
+    print(f"✅ Delta Spec initialized at: {change_dir.relative_to(root)}")
+    print(f"📝 Files generated:")
+    print(f"   • proposal.md (Problem & boundaries)")
+    print(f"   • specs.md    (Behavioral contracts Added/Modified)")
+    print(f"   • design.md   (Technical choices & schema)")
+    print(f"   • tasks.md    (TDD task breakdown)")
+    print(f"   • evidence.md (Audit table ready for verifications)")
+    print(f"\n💡 Next Step: Edit the files, then run `kairos worktree create` to implement!")
+    return 0
+
+# ---------------------------------------------------------------------------
+# COMMAND: WORKTREE (Workspace Isolation)
+# ---------------------------------------------------------------------------
+
+def cmd_worktree(args):
+    root = find_repo_root()
+    state = load_state(root)
+    action = args.action
+
+    if action == "create":
+        name = args.name or state.get("active_change") or "kairos_task"
+        branch_name = f"kairos/{name}"
+        worktree_path = get_kairos_dir(root) / "worktrees" / name
+
+        if worktree_path.exists():
+            print(f"⚠️ Worktree already exists at {worktree_path}")
+            return 1
+
+        print(f"📦 Creating isolated git worktree at {worktree_path.relative_to(root)}...")
+        try:
+            subprocess.run(["git", "worktree", "add", "-b", branch_name, str(worktree_path)], check=True)
+            state["active_worktree"] = str(worktree_path)
+            state["current_stage"] = "BUILDING"
+            save_state(state, root)
+            print(f"✅ Isolated worktree ready on branch '{branch_name}'.")
+            print(f"👉 Navigate with: cd {worktree_path}")
+            return 0
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Failed to create worktree: {e}")
+            return 1
+
+    elif action == "remove":
+        name = args.name or (Path(state.get("active_worktree", "")).name if state.get("active_worktree") else None)
+        if not name:
+            print("❌ No active worktree to remove.")
+            return 1
+        worktree_path = get_kairos_dir(root) / "worktrees" / name
+        print(f"🗑️ Removing worktree at {worktree_path}...")
+        try:
+            subprocess.run(["git", "worktree", "remove", "--force", str(worktree_path)], check=True)
+            state["active_worktree"] = None
+            save_state(state, root)
+            print("✅ Worktree removed cleanly.")
+            return 0
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Failed to remove worktree: {e}")
+            return 1
+
+    elif action == "list":
+        subprocess.run(["git", "worktree", "list"])
+        return 0
+
+# ---------------------------------------------------------------------------
+# COMMAND: AUDIT (Zero-Trust Adversarial Diff Inspection)
+# ---------------------------------------------------------------------------
+
+FRAUD_PATTERNS = {
+    "weakened_test_skip": (r"(\btest\.skip\b|\bxit\b|\bfit\b|@pytest\.mark\.skip|\.skip\(|\bdescribe\.skip\b|(#|//)\s*(assert\b|expect\())", "Test skipped, disabled or commented out"),
+    "silent_failure_empty_catch": (r"(except(\s+[A-Za-z0-9_.]+\s*)?:\s*(pass|\.\.\.)|catch\s*\([^\)]*\)\s*\{\s*\})", "Empty exception handler / Silent failure"),
+    "phantom_stub": (r"(def\s+\w+\s*\(.*\)\s*:\s*(pass|\.\.\.)|function\s+\w+\s*\(.*\)\s*\{\s*\}|throw\s+new\s+NotImplementedError)", "Stub or unfinished function body"),
+    "assert_deletion": (r"^\s*(assert\b|expect\(|should\b)", "Assertion removed from code or test")
+}
+
+def scan_diff_text(diff_text):
+    """Robust algorithmic scanner for the 6 classic frauds across single and multi-line diff blocks."""
+    violations = []
+    lines = diff_text.splitlines()
+    current_file = ""
+
+    # Normalize multiline blocks in added lines
+    added_blocks = []
+    for line in lines:
+        if line.startswith("+++ b/"):
+            current_file = line[6:]
+            continue
+
+        if line.startswith("+") and not line.startswith("+++"):
+            code_line = line[1:].strip()
+            # Check single line patterns
+            for key, (pattern, desc) in FRAUD_PATTERNS.items():
+                if key != "assert_deletion" and re.search(pattern, code_line):
+                    violations.append({
+                        "file": current_file,
+                        "line": code_line,
+                        "fraud_type": key,
+                        "description": desc
+                    })
+            added_blocks.append((current_file, code_line))
+        elif line.startswith("-") and not line.startswith("---"):
+            code_line = line[1:].strip()
+            if re.search(FRAUD_PATTERNS["assert_deletion"][0], code_line):
+                violations.append({
+                    "file": current_file,
+                    "line": code_line,
+                    "fraud_type": "assert_deletion",
+                    "description": FRAUD_PATTERNS["assert_deletion"][1]
+                })
+
+    # Multiline check: def ...: followed by pass, or except ...: followed by pass
+    for i in range(len(added_blocks) - 1):
+        file_i, line_i = added_blocks[i]
+        file_next, line_next = added_blocks[i + 1]
+        if file_i == file_next:
+            combined = f"{line_i} {line_next}"
+            if re.search(r"def\s+\w+\s*\(.*\)\s*:\s*(pass|\.\.\.)", combined):
+                violations.append({
+                    "file": file_i,
+                    "line": combined,
+                    "fraud_type": "phantom_stub",
+                    "description": "Multi-line function stub (def ...: pass)"
+                })
+            if re.search(r"except(\s+[A-Za-z0-9_.]+\s*)?:\s*(pass|\.\.\.)", combined):
+                violations.append({
+                    "file": file_i,
+                    "line": combined,
+                    "fraud_type": "silent_failure_empty_catch",
+                    "description": "Multi-line empty catch (except ...: pass)"
+                })
+
+    return violations
+
+def cmd_audit(args):
+    root = find_repo_root()
+    base_branch = args.base or "main"
+    
+    print(f"🔍 Running KAIROS Adversarial Zero-Trust Audit against '{base_branch}'...")
+
+    try:
+        # Get diff against base
+        diff_res = subprocess.run(["git", "diff", f"{base_branch}...HEAD"],
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        diff_text = diff_res.stdout
+    except Exception:
+        # Fallback to local unstaged/staged diff
+        diff_res = subprocess.run(["git", "diff", "HEAD"],
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        diff_text = diff_res.stdout
+
+    if not diff_text.strip():
+        print("ℹ️ Diff is empty. No changes detected to audit.")
+        return 0
+
+    violations = scan_diff_text(diff_text)
+
+    print("=================================================================")
+    print("🛡️  KAIROS ADVERSARIAL AUDIT REPORT")
+    print("=================================================================")
+
+    if not violations:
+        state = load_state(root)
+        state["current_stage"] = "VERIFIED"
+        save_state(state, root)
+        print("VERDICT: [ ✅ VERIFIED ]")
+        print("• Zero fraudulent patterns detected.")
+        print("• No weakened tests, empty catch blocks, or phantom stubs found.")
+        print("=================================================================")
+        return 0
+    else:
+        state = load_state(root)
+        state["current_stage"] = "REPAIR_REQUIRED"
+        save_state(state, root)
+        print("VERDICT: [ ❌ REFUTED - FRAUD OR WEAKENED CHECKS DETECTED ]")
+        print(f"Found {len(violations)} suspicious pattern(s):\n")
+        for idx, v in enumerate(violations, 1):
+            print(f" [{idx}] {v['description'].upper()}")
+            print(f"     File: {v['file']}")
+            print(f"     Line: {v['line']}")
+        print("=================================================================")
+        print("Action required: Resolve all violations before progressing to Ship.")
+        return 1
+
+# ---------------------------------------------------------------------------
+# COMMAND: ARCHIVE (Promote Delta Spec to Living Spec)
+# ---------------------------------------------------------------------------
+
+def cmd_archive(args):
+    root = find_repo_root()
+    state = load_state(root)
+    change_id = args.name or state.get("active_change")
+
+    if not change_id:
+        print("❌ No active change specified or found in state.")
+        return 1
+
+    k_dir = get_kairos_dir(root)
+    change_dir = k_dir / "changes" / change_id
+    specs_dir = k_dir / "specs"
+
+    if not change_dir.exists():
+        print(f"❌ Change directory not found: {change_dir}")
+        return 1
+
+    specs_file = change_dir / "specs.md"
+    if specs_file.exists():
+        target_spec = specs_dir / f"{change_id.split('_', 2)[-1]}.md"
+        target_spec.write_text(specs_file.read_text(encoding="utf-8"), encoding="utf-8")
+        print(f"📜 Promoted living spec to: {target_spec.relative_to(root)}")
+
+    # Mark archived in state
+    state["history"].append({
+        "change_id": change_id,
+        "archived_at": datetime.now().isoformat(),
+        "mode": state.get("mode")
+    })
+    state["active_change"] = None
+    state["current_stage"] = "SHIPPED"
+    save_state(state, root)
+
+    print(f"✅ Change '{change_id}' successfully archived.")
+    return 0
+
+# ---------------------------------------------------------------------------
+# COMMAND: EXPORT (Multi-Harness Adapter Generator)
+# ---------------------------------------------------------------------------
+
+def cmd_export(args):
+    target = args.target.lower()
+    root = find_repo_root()
+    
+    print(f"🚀 Exporting KAIROS configurations for harness: '{target}'...")
+
+    if target in ["claude", "all"]:
+        claude_dir = root / ".claude"
+        claude_dir.mkdir(exist_ok=True)
+        claude_md = root / "CLAUDE.md"
+        claude_md.write_text("""# KAIROS Protocol for Claude Code
+Always uphold the KAIROS Elastic Engine:
+1. Assess complexity: Mode Alpha (UI/Lite), Mode Beta (Standard), Mode Gamma (Critical).
+2. For Mode Alpha (<30 LOC / UI): Make surgical edits, run visual check, skip subagents.
+3. For Mode Beta/Gamma: Never write production code without a failing test first (TDD).
+4. Run adversarial check (`python3 scripts/kairos_cli.py audit`) before claiming done.
+5. Zero tolerance for weakened assertions, phantom stubs, or silent failures.
+""", encoding="utf-8")
+        print("   ✅ Generated CLAUDE.md")
+
+    if target in ["cursor", "all"]:
+        cursor_dir = root / ".cursor" / "rules"
+        cursor_dir.mkdir(parents=True, exist_ok=True)
+        cursorrules = root / ".cursorrules"
+        cursorrules.write_text("""# KAIROS Protocol for Cursor
+- Apply the Elastic Dial: do not over-engineer simple UI changes.
+- In logic and backend: TDD is mandatory (Red -> Green -> Refactor).
+- Ground truth is `git diff`, never user or agent claims.
+""", encoding="utf-8")
+        print("   ✅ Generated .cursorrules and .cursor/rules/")
+
+    if target in ["codex", "gemini", "universal", "all"]:
+        agents_md = root / "AGENTS.md"
+        agents_md.write_text("""# KAIROS Protocol for Autonomous Agents (Universal)
+- Governed by KAIROS Adaptive SDLC.
+- State tracked under `.kairos/state.json`.
+- Delta specs organized under `.kairos/changes/`.
+- Adversarial audits enforced via `kairos audit`.
+""", encoding="utf-8")
+        print("   ✅ Generated AGENTS.md")
+
+    print(f"🎉 Multi-harness export completed successfully.")
+    return 0
+
+# ---------------------------------------------------------------------------
+# COMMAND: STATUS & TELEMETRY
+# ---------------------------------------------------------------------------
+
+def cmd_status(args):
+    root = find_repo_root()
+    state = load_state(root)
+    stage = state.get("current_stage", "IDLE")
+    mode = state.get("mode", "alpha").upper()
+    budget = state.get("token_budget", 15000)
+    consumed = state.get("total_tokens_consumed", 0)
+    remaining = max(0, budget - consumed)
+    pct_used = (consumed / budget * 100) if budget > 0 else 0
+    change = state.get("active_change") or "None"
+    worktree = state.get("active_worktree") or "None (In-place)"
+
+    header = f"⚡ [KAIROS | Stage: {stage} | Mode: {mode} | Tokens: {consumed:,}/{budget:,} ({pct_used:.1f}%) | Left: {remaining:,}]"
+
+    if getattr(args, "header_only", False):
+        print(header)
+        return 0
+
+    print("=================================================================")
+    print("🧭 KAIROS REAL-TIME TELEMETRY & STAGE STATUS")
+    print("=================================================================")
+    print(header)
+    print("-----------------------------------------------------------------")
+    print(f"• Current Stage:     {stage}")
+    print(f"• Active Mode:       MODE {mode}")
+    print(f"• Active Change ID:  {change}")
+    print(f"• Active Worktree:   {worktree}")
+    print(f"• Tokens Consumed:   {consumed:,} tokens")
+    print(f"• Token Budget Cap:  {budget:,} tokens")
+    print(f"• Remaining Budget:  {remaining:,} tokens ({100 - pct_used:.1f}% remaining)")
+    print("=================================================================")
+    return 0
+
+def cmd_token(args):
+    root = find_repo_root()
+    state = load_state(root)
+    action = args.action
+    if action == "add":
+        state["total_tokens_consumed"] = state.get("total_tokens_consumed", 0) + args.count
+        save_state(state, root)
+        print(f"✅ Added {args.count:,} tokens. Total consumed: {state['total_tokens_consumed']:,} tokens.")
+    elif action == "reset":
+        state["total_tokens_consumed"] = 0
+        save_state(state, root)
+        print("✅ Token counter reset to 0.")
+    elif action == "set-stage":
+        state["current_stage"] = args.stage.upper()
+        save_state(state, root)
+        print(f"✅ Current stage updated to: {state['current_stage']}")
+    return 0
+
+# ---------------------------------------------------------------------------
+# MAIN CLI DISPATCHER
+# ---------------------------------------------------------------------------
+
+def main():
+    parser = argparse.ArgumentParser(prog="kairos", description="KAIROS: Adaptive SDLC & Token Governance CLI")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # Init
+    subparsers.add_parser("init", help="Initialize KAIROS in the current project")
+
+    # Dial
+    p_dial = subparsers.add_parser("dial", help="Classify task complexity (The Elastic Dial)")
+    p_dial.add_argument("description", nargs="+", help="Description of the task to classify")
+    p_dial.add_argument("--force-gamma", action="store_true", help="Force Gamma mode (Critical)")
+    p_dial.add_argument("--force-beta", action="store_true", help="Force Beta mode (Standard)")
+
+    # Spec
+    p_spec = subparsers.add_parser("spec", help="Scaffold a Delta Spec in .kairos/changes/")
+    p_spec.add_argument("name", help="Short name of the feature or change")
+
+    # Worktree
+    p_wt = subparsers.add_parser("worktree", help="Manage isolated git worktrees")
+    p_wt.add_argument("action", choices=["create", "remove", "list"], help="Worktree action")
+    p_wt.add_argument("name", nargs="?", default=None, help="Name of the worktree branch")
+
+    # Audit
+    p_audit = subparsers.add_parser("audit", help="Adversarially audit git diff for the 6 classic frauds")
+    p_audit.add_argument("--base", default="main", help="Base branch to diff against (default: main)")
+
+    # Archive
+    p_arc = subparsers.add_parser("archive", help="Promote Delta Spec to living specs")
+    p_arc.add_argument("name", nargs="?", default=None, help="Change ID to archive")
+
+    # Export
+    p_exp = subparsers.add_parser("export", help="Export KAIROS configuration to other harnesses")
+    p_exp.add_argument("target", choices=["claude", "cursor", "codex", "gemini", "universal", "all"], help="Target harness")
+
+    # Status & Telemetry
+    p_stat = subparsers.add_parser("status", help="Show current stage and token telemetry")
+    p_stat.add_argument("--header-only", action="store_true", help="Print only the single-line telemetry header")
+
+    # Token management
+    p_tok = subparsers.add_parser("token", help="Manage token budget and telemetry")
+    p_tok.add_argument("action", choices=["add", "reset", "set-stage"], help="Token action")
+    p_tok.add_argument("count", nargs="?", type=int, default=0, help="Tokens to add")
+    p_tok.add_argument("--stage", default="IDLE", help="Stage name for set-stage")
+
+    args = parser.parse_args()
+
+    dispatch = {
+        "init": cmd_init,
+        "dial": cmd_dial,
+        "spec": cmd_spec,
+        "worktree": cmd_worktree,
+        "audit": cmd_audit,
+        "archive": cmd_archive,
+        "export": cmd_export,
+        "status": cmd_status,
+        "token": cmd_token,
+    }
+
+    try:
+        exit_code = dispatch[args.command](args)
+        sys.exit(exit_code or 0)
+    except Exception as e:
+        print(f"❌ Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
