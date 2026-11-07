@@ -40,6 +40,15 @@ Always audit changes against these specific failure modes:
 6. **Debris:**
    - Leftover scratch files, debug logs, unused imports, or dead code.
 
+## Verification of Test Strength (K-Mutant)
+
+Never accept passing tests at face value. A test suite that only verifies happy paths or mocks its own assertions is a liability.
+* In Mode Beta and Gamma, run:
+  ```bash
+  python3 scripts/kairos_cli.py mutate <target_file> --test "<test_command>" --max-mutants 10
+  ```
+* Any surviving mutant indicates a fragile or tautological test. Require the worker to add assertions before issuing a READY status.
+
 ## Evidence Audit Table & Gate Decision
 
 Produce the audit report in this formal structure:

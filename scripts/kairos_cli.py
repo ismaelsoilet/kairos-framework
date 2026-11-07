@@ -349,6 +349,8 @@ FRAUD_PATTERNS = {
     "assert_deletion": (r"^\s*(assert\b|expect\(|should\b)", "Assertion removed from code or test")
 }
 
+CODE_EXTENSIONS = (".py", ".ts", ".js", ".jsx", ".tsx", ".java", ".go", ".rs", ".rb", ".php", ".cs", ".c", ".cpp", ".swift", ".kt", ".dart")
+
 def scan_diff_text(diff_text):
     """Robust algorithmic scanner for the 6 classic frauds across single and multi-line diff blocks."""
     violations = []
@@ -360,6 +362,10 @@ def scan_diff_text(diff_text):
     for line in lines:
         if line.startswith("+++ b/"):
             current_file = line[6:]
+            continue
+
+        # Skip documentation and non-code files (e.g. .md, .txt, .json)
+        if not any(current_file.endswith(ext) for ext in CODE_EXTENSIONS):
             continue
 
         if line.startswith("+") and not line.startswith("+++"):
