@@ -1,0 +1,17 @@
+{
+  "version": "1.0.0",
+  "created_at": "2026-11-07T18:52:44.276385",
+  "current_stage": "SHIPPED",
+  "active_change": null,
+  "mode": "gamma",
+  "active_worktree": null,
+  "token_budget": 180000,
+  "total_tokens_consumed": 0,
+  "history": [
+    {
+      "change_id": "20261107_185250_mutation_dashboard_rollback",
+      "archived_at": "2026-11-07T18:56:32.435340",
+      "mode": "gamma"
+    }
+  ]
+}

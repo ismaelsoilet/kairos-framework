@@ -22,10 +22,22 @@ def test_safe_account_succeeds():
     """50 threads withdrawing 10 each from 1000 balance with Lock. Expected: 500 balance."""
     account = SafeBankAccount(1000)
     threads = []
+    def do_withdraw():
+        res = account.withdraw(10)
+        assert res is True
     for _ in range(50):
-        t = threading.Thread(target=account.withdraw, args=(10,))
+        t = threading.Thread(target=do_withdraw)
         threads.append(t)
         t.start()
     for t in threads:
         t.join()
+    # Test boundary
+    assert account.withdraw(10000) is False
     return account.balance
+
+if __name__ == "__main__":
+    assert test_safe_account_succeeds() == 500
+    # Also test Unsafe
+    u = UnsafeBankAccount(100)
+    assert u.withdraw(50) is True
+    assert u.withdraw(500) is False

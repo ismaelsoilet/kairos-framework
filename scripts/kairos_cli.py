@@ -414,12 +414,16 @@ def cmd_audit(args):
     print(f"🔍 Running KAIROS Adversarial Zero-Trust Audit against '{base_branch}'...")
 
     try:
-        # Get diff against base
+        # Get diff against base branch
         diff_res = subprocess.run(["git", "diff", f"{base_branch}...HEAD"],
                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
         diff_text = diff_res.stdout
+        # Fallback to local unstaged/staged diff if HEAD is on base_branch
+        if not diff_text.strip():
+            diff_res = subprocess.run(["git", "diff", "HEAD"],
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            diff_text = diff_res.stdout
     except Exception:
-        # Fallback to local unstaged/staged diff
         diff_res = subprocess.run(["git", "diff", "HEAD"],
                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         diff_text = diff_res.stdout
@@ -567,6 +571,28 @@ def cmd_status(args):
         print(header)
         return 0
 
+    if getattr(args, "dashboard", False):
+        stages = ["IDLE", "CLASSIFIED", "SPECIFYING", "BUILDING", "AUDITING", "VERIFIED", "SHIPPED"]
+        current_idx = stages.index(stage) if stage in stages else 0
+        stage_pct = int(((current_idx + 1) / len(stages)) * 100)
+
+        filled_stages = int((current_idx + 1) / len(stages) * 14)
+        stage_bar = "█" * filled_stages + "░" * (14 - filled_stages)
+
+        token_ratio = min(1.0, consumed / budget) if budget > 0 else 0
+        filled_tok = int(token_ratio * 14)
+        tok_bar = "█" * filled_tok + "░" * (14 - filled_tok)
+
+        print("\n┌──────────────────────────────────────────────────────────────┐")
+        print(f"│ 🧭 KAIROS MISSION CONTROL DASHBOARD                         │")
+        print("├──────────────────────────────────────────────────────────────┤")
+        print(f"│ Stage: [{stage_bar}] {stage_pct:>3}%  ({stage:<10})      │")
+        print(f"│ Token: [{tok_bar}] {pct_used:>5.1f}% ({consumed:,}/{budget:,} tok) │")
+        print(f"│ Mode:  MODE {mode:<7}  Worktree: {Path(worktree).name:<18}    │")
+        print(f"│ Change: {change[:48]:<52} │")
+        print("└──────────────────────────────────────────────────────────────┘\n")
+        return 0
+
     print("=================================================================")
     print("🧭 KAIROS REAL-TIME TELEMETRY & STAGE STATUS")
     print("=================================================================")
@@ -599,6 +625,109 @@ def cmd_token(args):
         save_state(state, root)
         print(f"✅ Current stage updated to: {state['current_stage']}")
     return 0
+
+# ---------------------------------------------------------------------------
+# COMMAND: ROLLBACK
+# ---------------------------------------------------------------------------
+
+def cmd_rollback(args=None):
+    root = find_repo_root()
+    state = load_state(root)
+    print("⚠️ Initiating KAIROS Worktree Rollback (Discarding dirty state)...")
+    try:
+        subprocess.run(["git", "reset", "--hard", "HEAD"], check=True)
+        subprocess.run(["git", "clean", "-fd"], check=True)
+        state["current_stage"] = "ROLLED_BACK"
+        save_state(state, root)
+        print("✅ Worktree restored to clean HEAD snapshot.")
+        return 0
+    except Exception as e:
+        print(f"❌ Rollback failed: {e}")
+        return 1
+
+# ---------------------------------------------------------------------------
+# COMMAND: MUTATE (K-Mutant Mutation Testing Engine)
+# ---------------------------------------------------------------------------
+
+MUTATION_OPS = [
+    (r"\b==\b", "!="),
+    (r"\b!=\b", "=="),
+    (r"\b>=\b", "<"),
+    (r"\b<=\b", ">"),
+    (r"\b\+\b", "-"),
+    (r"\b-\b", "+"),
+    (r"\bTrue\b", "False"),
+    (r"\bFalse\b", "True"),
+    (r"\breturn True\b", "return False"),
+    (r"\breturn False\b", "return True"),
+]
+
+def cmd_mutate(args):
+    target_path = Path(args.target).resolve()
+    if not target_path.exists():
+        print(f"❌ Target file not found: {target_path}")
+        return 1
+
+    test_cmd = args.test
+    max_mutants = getattr(args, "max_mutants", 10) or 10
+
+    original_content = target_path.read_text(encoding="utf-8")
+    mutations_generated = []
+
+    lines = original_content.splitlines(keepends=True)
+    in_docstring = False
+    for line_idx, line in enumerate(lines):
+        stripped = line.strip()
+        if '"""' in stripped or "'''" in stripped:
+            if stripped.count('"""') == 1 or stripped.count("'''") == 1:
+                in_docstring = not in_docstring
+            continue
+        if in_docstring or stripped.startswith("#"):
+            continue
+
+        for pattern, replacement in MUTATION_OPS:
+            if re.search(pattern, line):
+                new_line = re.sub(pattern, replacement, line, count=1)
+                mutant_lines = list(lines)
+                mutant_lines[line_idx] = new_line
+                mutations_generated.append(("".join(mutant_lines), f"Line {line_idx+1}: {pattern} -> {replacement}"))
+                if len(mutations_generated) >= max_mutants:
+                    break
+        if len(mutations_generated) >= max_mutants:
+            break
+
+    if not mutations_generated:
+        print("ℹ️ No mutatable operators found in target file.")
+        return 0
+
+    print("=================================================================")
+    print(f"🧬 KAIROS K-MUTANT ENGINE: MUTATION TESTING FOR [{target_path.name}]")
+    print("=================================================================")
+    print(f"• Generated Mutants: {len(mutations_generated)}")
+    print(f"• Test Command:     {test_cmd}\n")
+
+    killed = 0
+    survived = 0
+
+    try:
+        for idx, (mutant_content, desc) in enumerate(mutations_generated, 1):
+            target_path.write_text(mutant_content, encoding="utf-8")
+            res = subprocess.run(test_cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if res.returncode != 0:
+                killed += 1
+                print(f"  [{idx}/{len(mutations_generated)}] 💀 KILLED:   {desc}")
+            else:
+                survived += 1
+                print(f"  [{idx}/{len(mutations_generated)}] ⚠️  SURVIVED: {desc} (Weak Test!)")
+    finally:
+        target_path.write_text(original_content, encoding="utf-8")
+
+    score = (killed / len(mutations_generated) * 100) if mutations_generated else 100
+    print("-----------------------------------------------------------------")
+    print(f"🎯 MUTATION SCORE: {score:.1f}% (Killed: {killed} | Survived: {survived})")
+    print(f"🛡️  Source file [{target_path.name}] successfully restored.")
+    print("=================================================================")
+    return 0 if survived == 0 else 1
 
 # ---------------------------------------------------------------------------
 # MAIN CLI DISPATCHER
@@ -641,12 +770,22 @@ def main():
     # Status & Telemetry
     p_stat = subparsers.add_parser("status", help="Show current stage and token telemetry")
     p_stat.add_argument("--header-only", action="store_true", help="Print only the single-line telemetry header")
+    p_stat.add_argument("--dashboard", action="store_true", help="Display visual terminal mission control dashboard")
 
     # Token management
     p_tok = subparsers.add_parser("token", help="Manage token budget and telemetry")
     p_tok.add_argument("action", choices=["add", "reset", "set-stage"], help="Token action")
     p_tok.add_argument("count", nargs="?", type=int, default=0, help="Tokens to add")
     p_tok.add_argument("--stage", default="IDLE", help="Stage name for set-stage")
+
+    # Rollback
+    subparsers.add_parser("rollback", help="Safely discard dirty state in worktree")
+
+    # Mutate
+    p_mut = subparsers.add_parser("mutate", help="Run K-Mutant Mutation Testing on target file")
+    p_mut.add_argument("target", help="Target source file to mutate")
+    p_mut.add_argument("--test", required=True, help="Test command to run for each mutant")
+    p_mut.add_argument("--max-mutants", type=int, default=10, help="Max mutants to test")
 
     args = parser.parse_args()
 
@@ -660,6 +799,8 @@ def main():
         "export": cmd_export,
         "status": cmd_status,
         "token": cmd_token,
+        "rollback": cmd_rollback,
+        "mutate": cmd_mutate,
     }
 
     try:
