@@ -22,6 +22,12 @@
       "change_id": "20261107_190718_quality_synthesis_and_architecture",
       "archived_at": "2026-11-07T19:08:45.104604",
       "mode": "gamma"
+    },
+    {
+      "change_id": "20261107_201224_patch_red_team_vulnerabilities",
+      "archived_at": "2026-11-07T20:17:56.691480",
+      "mode": "gamma"
     }
-  ]
+  ],
+  "_test_atomic_key": "atomic_value_123"
 }

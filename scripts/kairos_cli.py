@@ -9,6 +9,7 @@ import sys
 import os
 import json
 import re
+import shutil
 import argparse
 import subprocess
 from pathlib import Path
@@ -81,11 +82,17 @@ def load_state(root=None):
         return {"error": "corrupted_state"}
 
 def save_state(state, root=None):
+    if state.get("error") == "corrupted_state":
+        return
     k_dir = get_kairos_dir(root)
     k_dir.mkdir(parents=True, exist_ok=True)
     state_file = k_dir / "state.json"
-    with open(state_file, "w", encoding="utf-8") as f:
+    temp_file = k_dir / f"state.json.{os.getpid()}.tmp"
+    with open(temp_file, "w", encoding="utf-8") as f:
         json.dump(state, f, indent=2, ensure_ascii=False)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(temp_file, state_file)
 
 # ---------------------------------------------------------------------------
 # COMMAND: INIT
@@ -307,6 +314,17 @@ def cmd_worktree(args):
         print(f"📦 Creating isolated git worktree at {worktree_path.relative_to(root)}...")
         try:
             subprocess.run(["git", "worktree", "add", "-b", branch_name, str(worktree_path)], check=True)
+            
+            # Auto-link shared project assets and dependencies (env, node_modules, venv)
+            for shared_name in [".env", ".env.local", ".venv", "node_modules", "vendor"]:
+                source_item = root / shared_name
+                target_link = worktree_path / shared_name
+                if source_item.exists() and not target_link.exists():
+                    try:
+                        os.symlink(source_item, target_link)
+                    except OSError as err:
+                        print(f"ℹ️ Optional link for {shared_name} skipped: {err}")
+
             state["active_worktree"] = str(worktree_path)
             state["current_stage"] = "BUILDING"
             save_state(state, root)
@@ -323,12 +341,15 @@ def cmd_worktree(args):
             print("❌ No active worktree to remove.")
             return 1
         worktree_path = get_kairos_dir(root) / "worktrees" / name
+        branch_name = f"kairos/{name}"
         print(f"🗑️ Removing worktree at {worktree_path}...")
         try:
             subprocess.run(["git", "worktree", "remove", "--force", str(worktree_path)], check=True)
+            # Clean up the associated task branch so it can be cleanly recreated later
+            subprocess.run(["git", "branch", "-D", branch_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             state["active_worktree"] = None
             save_state(state, root)
-            print("✅ Worktree removed cleanly.")
+            print("✅ Worktree and task branch removed cleanly.")
             return 0
         except subprocess.CalledProcessError as e:
             print(f"❌ Failed to remove worktree: {e}")
@@ -343,96 +364,185 @@ def cmd_worktree(args):
 # ---------------------------------------------------------------------------
 
 FRAUD_PATTERNS = {
-    "weakened_test_skip": (r"(\btest\.skip\b|\bxit\b|\bfit\b|@pytest\.mark\.skip|\.skip\(|\bdescribe\.skip\b|(#|//)\s*(assert\b|expect\())", "Test skipped, disabled or commented out"),
-    "silent_failure_empty_catch": (r"(except(\s+[A-Za-z0-9_.]+\s*)?:\s*(pass|\.\.\.)|catch\s*\([^\)]*\)\s*\{\s*\})", "Empty exception handler / Silent failure"),
-    "phantom_stub": (r"(def\s+\w+\s*\(.*\)\s*:\s*(pass|\.\.\.)|function\s+\w+\s*\(.*\)\s*\{\s*\}|throw\s+new\s+NotImplementedError)", "Stub or unfinished function body"),
-    "assert_deletion": (r"^\s*(assert\b|expect\(|should\b)", "Assertion removed from code or test")
+    "weakened_test_skip": (
+        r"(\btest\.skip\b|\bxit\b|\bfit\b|@pytest\.mark\.skip|\.skip\(|\bdescribe\.skip\b|(#|//)\s*(assert\b|expect\()|__import__\(['\"]pytest['\"]\)\.skip)",
+        "Test skipped, disabled or commented out"
+    ),
+    "silent_failure_empty_catch": (
+        r"(except(\s+[A-Za-z0-9_.]+(\s+as\s+\w+)?)?\s*:\s*(pass|\.\.\.)|catch\s*(\([^\)]*\))?\s*\{\s*\})",
+        "Empty exception handler / Silent failure"
+    ),
+    "phantom_stub": (
+        r"(def\s+\w+\s*\(.*\)\s*:\s*(pass|\.\.\.|return\s+None|return\s+\{\}|return\s+\[\]|return\s+['\"]['\"])|function\s+\w+\s*\(.*\)\s*\{\s*(return\s+null;|return\s+undefined;|return\s+\{\};)?\s*\}|throw\s+new\s+NotImplementedError)",
+        "Stub or unfinished function body"
+    )
 }
 
-CODE_EXTENSIONS = (".py", ".ts", ".js", ".jsx", ".tsx", ".java", ".go", ".rs", ".rb", ".php", ".cs", ".c", ".cpp", ".swift", ".kt", ".dart")
+CODE_EXTENSIONS = (
+    ".py", ".ts", ".js", ".jsx", ".tsx", ".java", ".go", ".rs", ".rb", ".php",
+    ".cs", ".c", ".cpp", ".swift", ".kt", ".dart", ".sh", ".sql"
+)
 
 def scan_diff_text(diff_text):
     """Robust algorithmic scanner for the 6 classic frauds across single and multi-line diff blocks."""
     violations = []
     lines = diff_text.splitlines()
+    
     current_file = ""
+    file_added_lines = {}
+    file_deleted_asserts = {}
+    file_added_asserts = {}
 
-    # Normalize multiline blocks in added lines
-    added_blocks = []
     for line in lines:
         if line.startswith("+++ b/"):
-            current_file = line[6:]
+            current_file = line[6:].strip()
             continue
 
-        # Skip documentation and non-code files (e.g. .md, .txt, .json)
-        if not any(current_file.endswith(ext) for ext in CODE_EXTENSIONS):
+        # Skip non-code files
+        if not any(current_file.lower().endswith(ext) for ext in CODE_EXTENSIONS):
             continue
+
+        if current_file not in file_added_lines:
+            file_added_lines[current_file] = []
+            file_deleted_asserts[current_file] = 0
+            file_added_asserts[current_file] = 0
 
         if line.startswith("+") and not line.startswith("+++"):
-            code_line = line[1:].strip()
-            # Check single line patterns
+            code_line = line[1:].rstrip()
+            file_added_lines[current_file].append(code_line)
+            # Count added assertions
+            if re.search(r"^\s*(assert\b|expect\(|self\.assert\w+)", code_line):
+                file_added_asserts[current_file] += 1
+
+            # Single-line checks
+            stripped_code = code_line.strip()
+            is_comment = stripped_code.startswith("#") or stripped_code.startswith("//") or stripped_code.startswith('"""') or stripped_code.startswith("'''") or stripped_code.startswith("*")
             for key, (pattern, desc) in FRAUD_PATTERNS.items():
-                if key != "assert_deletion" and re.search(pattern, code_line):
+                if is_comment and key in ("silent_failure_empty_catch", "phantom_stub"):
+                    continue
+                if re.search(pattern, stripped_code):
                     violations.append({
                         "file": current_file,
-                        "line": code_line,
+                        "line": stripped_code,
                         "fraud_type": key,
                         "description": desc
                     })
-            added_blocks.append((current_file, code_line))
-        elif line.startswith("-") and not line.startswith("---"):
-            code_line = line[1:].strip()
-            if re.search(FRAUD_PATTERNS["assert_deletion"][0], code_line):
-                violations.append({
-                    "file": current_file,
-                    "line": code_line,
-                    "fraud_type": "assert_deletion",
-                    "description": FRAUD_PATTERNS["assert_deletion"][1]
-                })
 
-    # Multiline check: def ...: followed by pass, or except ...: followed by pass
-    for i in range(len(added_blocks) - 1):
-        file_i, line_i = added_blocks[i]
-        file_next, line_next = added_blocks[i + 1]
-        if file_i == file_next:
-            combined = f"{line_i} {line_next}"
-            if re.search(r"def\s+\w+\s*\(.*\)\s*:\s*(pass|\.\.\.)", combined):
-                violations.append({
-                    "file": file_i,
-                    "line": combined,
-                    "fraud_type": "phantom_stub",
-                    "description": "Multi-line function stub (def ...: pass)"
-                })
-            if re.search(r"except(\s+[A-Za-z0-9_.]+\s*)?:\s*(pass|\.\.\.)", combined):
-                violations.append({
-                    "file": file_i,
-                    "line": combined,
-                    "fraud_type": "silent_failure_empty_catch",
-                    "description": "Multi-line empty catch (except ...: pass)"
-                })
+        elif line.startswith("-") and not line.startswith("---"):
+            code_line = line[1:].rstrip()
+            # Count deleted assertions
+            if re.search(r"^\s*(assert\b|expect\(|self\.assert\w+)", code_line):
+                file_deleted_asserts[current_file] += 1
+
+    # Check for net assert deletions per file (prevents false positives on assert refactoring)
+    for fname, del_count in file_deleted_asserts.items():
+        add_count = file_added_asserts.get(fname, 0)
+        if del_count > add_count:
+            violations.append({
+                "file": fname,
+                "line": f"Deleted {del_count} assertions vs {add_count} added",
+                "fraud_type": "assert_deletion",
+                "description": f"Net assertion deletion detected ({del_count - add_count} assertions removed without replacement)"
+            })
+
+    # Multiline block scanner: comment-tolerant, whitespace-tolerant
+    for fname, added in file_added_lines.items():
+        n = len(added)
+        for i in range(n):
+            line_i = added[i].strip()
+
+            # Python except block check
+            if re.match(r"^except(\s+[A-Za-z0-9_.]+(\s+as\s+\w+)?)?\s*:", line_i):
+                # Look ahead for first non-comment non-empty statement
+                for j in range(i + 1, min(i + 10, n)):
+                    next_stmt = added[j].strip()
+                    if not next_stmt or next_stmt.startswith("#") or next_stmt.startswith('"""') or next_stmt.startswith("'''"):
+                        continue
+                    if re.match(r"^(pass|\.\.\.)\b", next_stmt):
+                        violations.append({
+                            "file": fname,
+                            "line": f"{line_i} ... {next_stmt}",
+                            "fraud_type": "silent_failure_empty_catch",
+                            "description": "Multi-line empty exception handler (silent failure)"
+                        })
+                    break
+
+            # JS/TS catch block check (matches both `catch (...) {` and `} catch (...) {`)
+            if re.search(r"\bcatch(\s*\([^\)]*\))?\s*\{?", line_i):
+                # Look ahead for next non-comment non-empty statement
+                for j in range(i + 1, min(i + 10, n)):
+                    next_stmt = added[j].strip()
+                    if not next_stmt or next_stmt.startswith("//") or next_stmt.startswith("/*") or next_stmt.startswith("*"):
+                        continue
+                    if next_stmt == "}":
+                        violations.append({
+                            "file": fname,
+                            "line": f"{line_i} ... }}",
+                            "fraud_type": "silent_failure_empty_catch",
+                            "description": "Multi-line empty catch block in JavaScript/TypeScript"
+                        })
+                    break
+
+            # Function stub check (Python and JS/TS)
+            is_py_func = re.match(r"^def\s+\w+\s*\(.*\)\s*:", line_i)
+            is_js_func = re.match(r"^(function\s+\w+|const\s+\w+\s*=\s*(\([^\)]*\)|async\s*\([^\)]*\))\s*=>)\s*\{?", line_i)
+
+            if is_py_func:
+                for j in range(i + 1, min(i + 10, n)):
+                    next_stmt = added[j].strip()
+                    if not next_stmt or next_stmt.startswith("#") or next_stmt.startswith('"""') or next_stmt.startswith("'''"):
+                        continue
+                    if re.match(r"^(pass|\.\.\.|return\s+None|return\s+\{\}|return\s+\[\]|return\s+['\"]['\"])\b", next_stmt):
+                        violations.append({
+                            "file": fname,
+                            "line": f"{line_i} ... {next_stmt}",
+                            "fraud_type": "phantom_stub",
+                            "description": f"Multi-line function stub ({next_stmt})"
+                        })
+                    break
+
+            if is_js_func:
+                for j in range(i + 1, min(i + 10, n)):
+                    next_stmt = added[j].strip()
+                    if not next_stmt or next_stmt.startswith("//") or next_stmt.startswith("/*") or next_stmt.startswith("*"):
+                        continue
+                    if next_stmt in ("}", "return null;", "return undefined;", "return {};", "return [];"):
+                        violations.append({
+                            "file": fname,
+                            "line": f"{line_i} ... {next_stmt}",
+                            "fraud_type": "phantom_stub",
+                            "description": f"Multi-line function stub in JS/TS ({next_stmt})"
+                        })
+                    break
 
     return violations
 
 def cmd_audit(args):
     root = find_repo_root()
-    base_branch = args.base or "main"
+    base_branch = args.base
+    if not base_branch:
+        check_main = subprocess.run(["git", "rev-parse", "--verify", "main"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        base_branch = "main" if check_main.returncode == 0 else "master"
     
     print(f"🔍 Running KAIROS Adversarial Zero-Trust Audit against '{base_branch}'...")
 
+    diff_text = ""
     try:
-        # Get diff against base branch
         diff_res = subprocess.run(["git", "diff", f"{base_branch}...HEAD"],
-                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
-        diff_text = diff_res.stdout
-        # Fallback to local unstaged/staged diff if HEAD is on base_branch
-        if not diff_text.strip():
-            diff_res = subprocess.run(["git", "diff", "HEAD"],
-                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if diff_res.returncode == 0:
             diff_text = diff_res.stdout
     except Exception:
-        diff_res = subprocess.run(["git", "diff", "HEAD"],
-                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        diff_text = diff_res.stdout
+        pass
+
+    # Include unstaged / staged working tree diff as well
+    local_diff = subprocess.run(["git", "diff", "HEAD"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if local_diff.stdout.strip():
+        diff_text += "\n" + local_diff.stdout
+    
+    if not diff_text.strip():
+        unstaged = subprocess.run(["git", "diff"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        diff_text = unstaged.stdout
 
     if not diff_text.strip():
         print("ℹ️ Diff is empty. No changes detected to audit.")
@@ -641,6 +751,13 @@ def cmd_rollback(args=None):
     state = load_state(root)
     print("⚠️ Initiating KAIROS Worktree Rollback (Discarding dirty state)...")
     try:
+        # Safety backup of uncommitted changes before destructive reset
+        diff_res = subprocess.run(["git", "diff", "HEAD"], stdout=subprocess.PIPE, text=True)
+        if diff_res.stdout.strip():
+            backup_patch = get_kairos_dir(root) / f"rollback_backup_{int(datetime.now().timestamp())}.patch"
+            backup_patch.write_text(diff_res.stdout, encoding="utf-8")
+            print(f"📦 Safety backup of uncommitted changes saved to: {backup_patch.relative_to(root)}")
+
         subprocess.run(["git", "reset", "--hard", "HEAD"], check=True)
         subprocess.run(["git", "clean", "-fd"], check=True)
         state["current_stage"] = "ROLLED_BACK"
@@ -656,12 +773,12 @@ def cmd_rollback(args=None):
 # ---------------------------------------------------------------------------
 
 MUTATION_OPS = [
-    (r"\b==\b", "!="),
-    (r"\b!=\b", "=="),
-    (r"\b>=\b", "<"),
-    (r"\b<=\b", ">"),
-    (r"\b\+\b", "-"),
-    (r"\b-\b", "+"),
+    (r"(?<![!=<>])==(?!=)", "!="),
+    (r"!=", "=="),
+    (r">=", "<"),
+    (r"<=", ">"),
+    (r"(?<!\+)\+(?!\+)", "-"),
+    (r"(?<!\-)\-(?!\-)", "+"),
     (r"\bTrue\b", "False"),
     (r"\bFalse\b", "True"),
     (r"\breturn True\b", "return False"),
@@ -674,10 +791,17 @@ def cmd_mutate(args):
         print(f"❌ Target file not found: {target_path}")
         return 1
 
+    bak_path = target_path.with_suffix(target_path.suffix + ".kairos_bak")
+    if bak_path.exists():
+        # Recovery from previous interrupted run
+        shutil.copy2(bak_path, target_path)
+        bak_path.unlink()
+
     test_cmd = args.test
     max_mutants = getattr(args, "max_mutants", 10) or 10
 
     original_content = target_path.read_text(encoding="utf-8")
+    shutil.copy2(target_path, bak_path)
     mutations_generated = []
 
     lines = original_content.splitlines(keepends=True)
@@ -703,6 +827,8 @@ def cmd_mutate(args):
             break
 
     if not mutations_generated:
+        if bak_path.exists():
+            bak_path.unlink()
         print("ℹ️ No mutatable operators found in target file.")
         return 0
 
@@ -726,7 +852,11 @@ def cmd_mutate(args):
                 survived += 1
                 print(f"  [{idx}/{len(mutations_generated)}] ⚠️  SURVIVED: {desc} (Weak Test!)")
     finally:
-        target_path.write_text(original_content, encoding="utf-8")
+        if bak_path.exists():
+            shutil.copy2(bak_path, target_path)
+            bak_path.unlink()
+        else:
+            target_path.write_text(original_content, encoding="utf-8")
 
     score = (killed / len(mutations_generated) * 100) if mutations_generated else 100
     print("-----------------------------------------------------------------")

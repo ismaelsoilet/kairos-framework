@@ -13,6 +13,15 @@ import re
 import argparse
 from pathlib import Path
 
+# Connect local real_lab
+REAL_LAB_DIR = Path(__file__).resolve().parent / "real_lab"
+if str(REAL_LAB_DIR) not in sys.path:
+    sys.path.insert(0, str(REAL_LAB_DIR))
+try:
+    from run_experiment import run_physical_experiment
+except ImportError:
+    run_physical_experiment = None
+
 # ---------------------------------------------------------------------------
 # SCENARIOS DEFINITIONS
 # ---------------------------------------------------------------------------
@@ -211,7 +220,8 @@ def run_benchmark():
 
     # Summary Table
     print("\n==========================================================================")
-    print("📊 K-BENCH COMPARATIVE SCORECARD")
+    print("📊 K-BENCH MACRO PROJECTION & BUDGET COMPARISON")
+    print("   (Based on Elastic Dial profiles vs monolithic multi-agent architectures)")
     print("==========================================================================")
     print(f"{'Cenário':<22} | {'Vibe Coding':<16} | {'Heavy Monolith':<16} | {'KAIROS (Elastic)':<16}")
     print("-" * 76)
@@ -244,11 +254,16 @@ def main():
     parser = argparse.ArgumentParser(description="K-Bench Anti-Vaporware Evaluation")
     parser.add_argument("--test-detector", action="store_true", help="Test synthetic fraud detector")
     parser.add_argument("--run", action="store_true", help="Execute comparative benchmark suite")
+    parser.add_argument("--physical", action="store_true", help="Execute physical concurrency & race experiment")
     args = parser.parse_args()
+
+    if args.physical or (not args.test_detector and run_physical_experiment):
+        print("Executing physical runtime lab...")
+        run_physical_experiment()
 
     if args.test_detector or not args.run:
         evaluate_fraud_detector()
-    if args.run or not args.test_detector:
+    if args.run or (not args.test_detector and not args.physical):
         run_benchmark()
 
 if __name__ == "__main__":
