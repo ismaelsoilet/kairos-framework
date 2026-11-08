@@ -30,6 +30,11 @@ def test_vector_path_traversal_and_injection():
         if escaped:
             import shutil
             shutil.rmtree(evil_path, ignore_errors=True)
+        # Clean up change directories created inside .kairos/changes
+        for p in (REPO_ROOT / ".kairos" / "changes").glob("*kairos_evil_escape*"):
+            if p.is_dir():
+                import shutil
+                shutil.rmtree(p, ignore_errors=True)
         print(f"  [Ataque 1A] `kairos spec ../../../tmp/kairos_evil_escape`: {'❌ VAZOU (Escreveu fora do repo!)' if escaped else '🛡️ BARROU'}")
     except Exception as e:
         print(f"  [Ataque 1A] Exceção levantada: 🛡️ BARROU ({e})")

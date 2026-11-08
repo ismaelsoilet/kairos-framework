@@ -724,6 +724,32 @@ def cmd_audit(args):
         except (subprocess.SubprocessError, OSError):
             unstaged = None
 
+        # Include untracked files as synthetic additions
+        try:
+            untracked_res = subprocess.run(
+                ["git", "ls-files", "--others", "--exclude-standard"],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=target_path
+            )
+            if untracked_res.returncode == 0 and untracked_res.stdout.strip():
+                for rel_path_str in untracked_res.stdout.splitlines():
+                    rel_path_str = rel_path_str.strip()
+                    if not rel_path_str or rel_path_str.startswith(".git/"):
+                        continue
+                    ext = "." + rel_path_str.rsplit(".", 1)[-1].lower() if "." in rel_path_str else ""
+                    if ext in ALL_AUDIT_EXTENSIONS:
+                        untracked_file = target_path / rel_path_str
+                        if untracked_file.is_file():
+                            try:
+                                content = untracked_file.read_text(encoding="utf-8", errors="replace")
+                                file_lines = content.splitlines()
+                                synth = f"--- /dev/null\n+++ b/{rel_path_str}\n@@ -0,0 +1,{len(file_lines)} @@\n"
+                                synth += "\n".join(f"+{l}" for l in file_lines)
+                                diff_text += "\n" + synth
+                            except OSError:
+                                content = None
+        except (subprocess.SubprocessError, OSError):
+            untracked_res = None
+
         if diff_text.strip():
             all_diff_texts.append(diff_text)
 

@@ -141,15 +141,19 @@ class TestKairosFeatures(unittest.TestCase):
 
     def test_spec_name_sanitization_rejects_path_traversal(self):
         """ROUND 2 CRITICAL-01: cmd_spec must sanitize path traversal and keep files inside .kairos/changes."""
+        orig_state = load_state(REPO_ROOT)
         class MockArgs:
             name = "../../../tmp/evil_escape_test"
-        cmd_spec(MockArgs())
-        evil_leak = Path("/tmp/evil_escape_test")
-        self.assertFalse(evil_leak.exists(), "Path traversal escaped into /tmp!")
-        # Clean up test directories created in .kairos/changes
-        for p in (REPO_ROOT / ".kairos" / "changes").glob("*evil_escape_test*"):
-            if p.is_dir():
-                shutil.rmtree(p)
+        try:
+            cmd_spec(MockArgs())
+            evil_leak = Path("/tmp/evil_escape_test")
+            self.assertFalse(evil_leak.exists(), "Path traversal escaped into /tmp!")
+        finally:
+            save_state(orig_state, REPO_ROOT)
+            # Clean up test directories created in .kairos/changes
+            for p in (REPO_ROOT / ".kairos" / "changes").glob("*evil_escape_test*"):
+                if p.is_dir():
+                    shutil.rmtree(p)
 
     def test_token_add_rejects_negative_values(self):
         """ROUND 2 RISK-01: cmd_token add must reject negative values."""
@@ -426,23 +430,27 @@ deleted file mode 100644
 
     def test_dial_security_and_financial_prioritization(self):
         """ROUND 3 FIX-09: Financial and security tasks must prioritize MODE GAMMA over button/UI keywords."""
-        class MockArgsWire:
-            description = ["Create", "button", "to", "execute", "funds", "wire", "transfer"]
-            force_gamma = False
-            force_beta = False
+        orig_state = load_state(REPO_ROOT)
+        try:
+            class MockArgsWire:
+                description = ["Create", "button", "to", "execute", "funds", "wire", "transfer"]
+                force_gamma = False
+                force_beta = False
 
-        cmd_dial(MockArgsWire())
-        state = load_state(REPO_ROOT)
-        self.assertEqual(state.get("mode"), "gamma")
+            cmd_dial(MockArgsWire())
+            state = load_state(REPO_ROOT)
+            self.assertEqual(state.get("mode"), "gamma")
 
-        class MockArgsSql:
-            description = ["Fix", "critical", "SQL", "injection", "vulnerability", "in", "search", "endpoint"]
-            force_gamma = False
-            force_beta = False
+            class MockArgsSql:
+                description = ["Fix", "critical", "SQL", "injection", "vulnerability", "in", "search", "endpoint"]
+                force_gamma = False
+                force_beta = False
 
-        cmd_dial(MockArgsSql())
-        state = load_state(REPO_ROOT)
-        self.assertEqual(state.get("mode"), "gamma")
+            cmd_dial(MockArgsSql())
+            state = load_state(REPO_ROOT)
+            self.assertEqual(state.get("mode"), "gamma")
+        finally:
+            save_state(orig_state, REPO_ROOT)
 
     def test_state_file_locking_context_manager(self):
         """ROUND 3 FIX-10: StateLock must acquire and release file lock without error."""
@@ -451,6 +459,24 @@ deleted file mode 100644
             state = load_state(REPO_ROOT)
             self.assertIsNotNone(state)
             self.assertIn("mode", state)
+
+    def test_audit_catches_untracked_files_fraud(self):
+        """ROUND 3 FIX-11: Untracked new files with test frauds must be audited and blocked."""
+        orig_state = load_state(REPO_ROOT)
+        temp_file = REPO_ROOT / "tests" / "test_untracked_probe.py"
+        try:
+            bad_content = "import pytest\n@" + "pytest.mark.skip\ndef test_bad():\n    pass\n"
+            temp_file.write_text(bad_content, encoding="utf-8")
+            class MockAuditArgs:
+                base = "main"
+                worktree = None
+                root_only = True
+            exit_code = cmd_audit(MockAuditArgs())
+            self.assertNotEqual(exit_code, 0, "Untracked fraud file was silently ignored by audit!")
+        finally:
+            if temp_file.exists():
+                temp_file.unlink()
+            save_state(orig_state, REPO_ROOT)
 
 if __name__ == "__main__":
     unittest.main()
