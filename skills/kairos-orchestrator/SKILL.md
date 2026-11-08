@@ -14,11 +14,12 @@ The Master Orchestrator coordinates the end-to-end lifecycle of software develop
 /kairos:start <task description>
 ```
 
-## The 4-Stage Orchestrated Flow
+## The 5-Stage Orchestrated Flow (Research-First Architecture)
 
 ```mermaid
 flowchart TD
-    A["Stage 1: Dial & Intent<br/>Classify Risk & Token Budget"] --> B["Stage 2: Delta Spec<br/>Define Contracts & Task Plan"]
+    A["Stage 1: Dial & Intent<br/>Classify Risk & Token Budget"] --> R["Stage 1.5: Research & Recon<br/>Verify Stack & Native Primitives (kairos scout)"]
+    R --> B["Stage 2: Informed Brainstorm & Delta Spec<br/>Define Contracts & Task Plan (Zero Reinvented Wheels)"]
     B --> C["Stage 3: Build & TDD<br/>Isolated Worktree & Red-Green Cycle"]
     C --> D["Stage 4: Adversarial Audit & Ship<br/>Zero-Trust Check, K-Mutant & Living Spec Archive"]
 ```
@@ -27,13 +28,21 @@ flowchart TD
 1. Run `python3 scripts/kairos_cli.py dial "<task description>"`.
    - **Mode Alpha (Lite / UI):** Typos, styles, small visual adjustments (<30 LOC).
    - **Mode Beta (Standard):** New endpoints, isolated features, bugfixes.
-   - **Mode Gamma (Critical):** Core architecture, auth, database, financial logic.
+   - **Mode Gamma (Critical):** Core architecture, auth, database, multiplayer/financial logic.
 2. Output telemetry header: `python3 scripts/kairos_cli.py status --header-only`.
 
-### Stage 2: Spec & Contract Drafting
+### Stage 1.5: Pre-Brainstorming Recon & Research (The Anti-Reinvention Gate)
+* **The Iron Law:** Never brainstorm architectural solutions or select stacks based on training memory assumptions.
+* **In Mode Alpha:** Skipped (0 tokens).
+* **In Mode Beta:** Run `python3 scripts/kairos_cli.py scout` to inspect local manifests and detect cutoff risks.
+* **In Mode Gamma:** Mandatory invocation of `kairos_scout` to inspect live changelogs and type definitions. Identify what modern releases (e.g. Colyseus 0.15+, Next 15, Pydantic v2) already solve natively out-of-the-box before brainstorming custom logic.
+
+### Stage 2: Informed Brainstorming & Spec Drafting
 * **In Mode Alpha:** State the 3-point intent directly in chat (`Goal`, `Target File`, `Visual Verification`). Do NOT create files in `.kairos/changes/`.
-* **In Mode Beta:** Run `python3 scripts/kairos_cli.py spec <name>`. Fill `proposal.md`, `specs.md`, and `tasks.md`.
-* **In Mode Gamma:** In addition to Mode Beta, invoke the `kairos_critic` subagent to perform a cold, zero-context review of the specification before proceeding.
+* **In Mode Beta / Gamma:**
+  1. Brainstorm with `research.md` in context: choose the *minimal surface area* by leveraging framework native primitives rather than building custom workarounds.
+  2. Run `python3 scripts/kairos_cli.py spec <name>`. Fill `proposal.md`, `specs.md`, `design.md`, and `tasks.md`.
+  3. In Mode Gamma: invoke `kairos_critic` (zero conversation context) for adversarial spec review.
 
 ### Stage 3: Surgical Execution (Build)
 * **In Mode Alpha:** Apply the edit directly to the target file.

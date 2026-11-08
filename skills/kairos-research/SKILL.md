@@ -7,11 +7,15 @@ description: "Technology Scout & Upstream Research protocol. Scans project manif
 
 KAIROS strictly forbids autonomous coding agents from guessing external library APIs based solely on training memory.
 
+## The Cardinal Rule: Research BEFORE Brainstorming
+**Never brainstorm architectural designs, state machines, or protocol workarounds without first discovering what the modern framework release already provides natively.**
+Brainstorming on stale assumptions results in building fragile, custom wheels for problems that modern updates already solved out-of-the-box (e.g. state synchronization, matchmaking, and reconnection tokens in modern Colyseus; async cookies in Next 15; Schema v2 in Pydantic).
+
 ## When to Invoke
 
 * **Mode Alpha:** Disabled by default (UI tweaks and minor copy changes do not justify external doc scraping).
-* **Mode Beta:** Run `kairos scout` to inspect local manifests and detect high-risk dependencies.
-* **Mode Gamma (Mandatory):** Invoke `kairos_scout` to perform live documentation research and generate `research.md` before finalizing `design.md` or starting implementation.
+* **Mode Beta:** Run `kairos scout` before brainstorming to inspect local manifests and detect high-risk dependencies.
+* **Mode Gamma (Mandatory):** Invoke `kairos_scout` to perform live documentation research and generate `research.md` BEFORE opening any brainstorming session or drafting `design.md`.
 
 ---
 
