@@ -97,7 +97,7 @@ O cientista entrega um artefato formal na pasta da mudança ativa (`.kairos/chan
 import { GoogleGenAI } from '@google/genai';
 const ai = new GoogleGenAI({});
 const response = await ai.models.generateContent({
-  model: 'gemini-2.5-flash',
+  model: 'gemini-3.8-flash',
   contents: 'Hello world'
 });
 ```

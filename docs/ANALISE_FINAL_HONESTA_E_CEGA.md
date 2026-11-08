@@ -15,9 +15,9 @@ Antes de qualquer julgamento, é imperativo delimitar o que o KAIROS realmente �
 flowchart TD
     subgraph LLM_Tier["Nível Cognitivo (LLM / Modelo)"]
         direction LR
-        Gemini["Gemini Pro / Flash"]
-        Claude["Claude Sonnet / Opus"]
-        GPT["GPT-4o / o1"]
+        Gemini["Gemini 4 Argon / 3.8 Flash"]
+        Claude["Claude Sonnet 4.5/5.5"]
+        GPT["GPT-6 Astra / o4-mini"]
     end
 
     subgraph KAIROS_Core["KAIROS Governance Layer (Engine Local)"]

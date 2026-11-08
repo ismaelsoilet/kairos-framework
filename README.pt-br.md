@@ -61,7 +61,7 @@ Para evitar ilusões ou superengenharia, o KAIROS define fronteiras operacionais
 10. **Extensibilidade Nativa e Auto-Atualização:** Atualiza-se diretamente do repositório upstream oficial (`kairos update`) e descobre dinamicamente agentes e skills plugáveis (`kairos registry`).
 
 ### ❌ O QUE O KAIROS NÃO FAZ:
-1. **NÃO é um Modelo de Linguagem Próprio:** O KAIROS não gera tokens por conta própria; é uma camada de controle e governança que disciplina Modelos de Fronteira e Raciocínio (ex: Claude 3.7 Sonnet, Gemini 2.5 Pro/Flash, OpenAI o3/o1, DeepSeek-R1).
+1. **NÃO é um Modelo de Linguagem Próprio:** O KAIROS não gera tokens por conta própria; é uma camada de controle e governança que disciplina Modelos de Fronteira e Raciocínio (ex: Gemini 4 Argon, Gemini 3.8 Flash, Claude Sonnet 4.5/5.5, GPT-6 Astra, GPT-6.1 Sol, o4-mini).
 2. **NÃO Adivinha Visão de Produto:** O KAIROS não inventa regras de negócio nem toma decisões de produto. Ele exige aprovação humana nos portões de especificação.
 3. **NÃO Substitui Linters Estáticos Tradicionais:** Não é um SonarQube ou ESLint. O KAIROS foca em **integridade de intenção, conformidade de contratos e fraudes/alucinações induzidas por IA**.
 4. **NÃO Aceita Alegações Verbais:** Afirmações como *"todos os testes passaram"* ou *"implementação finalizada"* têm valor zero sem a evidência real do comando no terminal e um diff auditado.

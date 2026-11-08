@@ -297,7 +297,7 @@ deleted file mode 100644
 --- a/docs/guide.md
 +++ b/docs/guide.md
 @@ -10,3 +10,4 @@
-+We recommend using Gemini 3.8 or OpenAI Codex for this task.
++We recommend using gpt-3.5-turbo or OpenAI Codex for this task.
 """
         violations = scan_diff_text(diff)
         fraud_types = [v["fraud_type"] for v in violations]

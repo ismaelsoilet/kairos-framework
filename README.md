@@ -61,7 +61,7 @@ To ensure absolute engineering clarity, KAIROS maintains unambiguous boundaries:
 10. **Native Extensibility & Self-Updating:** Seamlessly updates from upstream (`kairos update`) and dynamically discovers pluggable agents and skills (`kairos registry`).
 
 ### ❌ What KAIROS DOES NOT DO:
-1. **It is NOT a Foundation Model:** KAIROS does not generate tokens on its own; it is a governance and orchestration engine that disciplines Frontier Reasoning and Coding Models (e.g., Claude 3.7 Sonnet, Gemini 2.5 Pro/Flash, OpenAI o3/o1, DeepSeek-R1).
+1. **It is NOT a Foundation Model:** KAIROS does not generate tokens on its own; it is a governance and orchestration engine that disciplines Frontier Reasoning and Coding Models (e.g., Gemini 4 Argon, Gemini 3.8 Flash, Claude Sonnet 4.5/5.5, GPT-6 Astra, GPT-6.1 Sol, o4-mini).
 2. **It Does NOT Guess Product Vision:** KAIROS will not invent business rules or make strategic product decisions. It forces human approval at specification gates.
 3. **It is NOT a Generic Static Linter:** It does not replace SonarQube or ESLint. KAIROS specializes in **behavioral integrity, intent compliance, and AI-induced hallucinations/frauds**.
 4. **It Does NOT Accept Verbal Claims:** Phrases like *"all tests pass"* or *"implementation complete"* have zero value without real bash stdout evidence and clean diff inspection.
