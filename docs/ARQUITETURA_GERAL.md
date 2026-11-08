@@ -39,11 +39,12 @@ O KAIROS se interpõe entre a intenção solta do usuário e as ferramentas de s
 
 ```mermaid
 flowchart TD
-    subgraph P1["1. PLANO COGNITIVO (Upstream)"]
+    subgraph P1["1. PLANO COGNITIVO & RECONHECIMENTO (Upstream)"]
         DIAL["Elastic Dial Classifier (Alpha, Beta, Gamma)"]
+        SCOUT["Subagente Scout (kairos_scout - Anti-Cutoff)"]
         SPEC["Motor de Delta Specs (proposal, specs, tasks)"]
         CRITIC["Subagente Goldfish (kairos_critic - Zero Viés)"]
-        DIAL --> SPEC --> CRITIC
+        DIAL --> SCOUT --> SPEC --> CRITIC
     end
 
     subgraph P2["2. PLANO DE EXECUÇÃO & ISOLAMENTO (Midstream)"]
@@ -62,9 +63,9 @@ flowchart TD
 
     subgraph P4["4. PLANO DE MEMÓRIA & ESPECIFICAÇÃO VIVA (Knowledge)"]
         SPECS["Base Canônica de Specs (.kairos/specs/)"]
-        DRIFT["Detecção Contínua de Drift (kairos drift)"]
-        TELEMETRY["Telemetria e Máquina de Estados (7 Estágios)"]
-        SPECS --> DRIFT --> TELEMETRY
+        LESSONS["Memória Viva de Lições (.kairos/lessons.md)"]
+        TELEMETRY["Telemetria e Máquina de Estados (9 Estágios)"]
+        SPECS --> LESSONS --> TELEMETRY
     end
 
     P1 --> P2 --> P3 --> P4

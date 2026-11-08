@@ -42,13 +42,20 @@ GAMMA_KEYWORDS = [
 # ---------------------------------------------------------------------------
 
 def find_repo_root():
-    """Locate the git repository root or fallback to current directory."""
+    """Locate the git repository root, fallback to script's repo, or fallback to current directory."""
     try:
         res = subprocess.run(["git", "rev-parse", "--show-toplevel"],
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
         return Path(res.stdout.strip())
     except Exception:
-        return Path.cwd()
+        # Check if the script itself resides inside a git repository
+        script_dir = Path(__file__).resolve().parent
+        try:
+            res = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True, cwd=script_dir)
+            return Path(res.stdout.strip())
+        except Exception:
+            return Path.cwd()
 
 def get_kairos_dir(root=None):
     if root is None:
@@ -581,7 +588,7 @@ def cmd_audit(args):
     root = find_repo_root()
     base_branch = args.base
     if not base_branch:
-        check_main = subprocess.run(["git", "rev-parse", "--verify", "main"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        check_main = subprocess.run(["git", "rev-parse", "--verify", "main"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=root)
         base_branch = "main" if check_main.returncode == 0 else "master"
     
     print(f"🔍 Running KAIROS Adversarial Zero-Trust Audit against '{base_branch}'...")
@@ -589,19 +596,19 @@ def cmd_audit(args):
     diff_text = ""
     try:
         diff_res = subprocess.run(["git", "diff", f"{base_branch}...HEAD"],
-                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=root)
         if diff_res.returncode == 0:
             diff_text = diff_res.stdout
     except Exception:
         pass
 
     # Include unstaged / staged working tree diff as well
-    local_diff = subprocess.run(["git", "diff", "HEAD"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    local_diff = subprocess.run(["git", "diff", "HEAD"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=root)
     if local_diff.stdout.strip():
         diff_text += "\n" + local_diff.stdout
     
     if not diff_text.strip():
-        unstaged = subprocess.run(["git", "diff"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        unstaged = subprocess.run(["git", "diff"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=root)
         diff_text = unstaged.stdout
 
     if not diff_text.strip():
