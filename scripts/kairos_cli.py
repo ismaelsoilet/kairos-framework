@@ -839,6 +839,42 @@ def cmd_registry(args):
     return 0
 
 # ---------------------------------------------------------------------------
+# COMMAND: LESSON (In-Repo Continuous Learning)
+# ---------------------------------------------------------------------------
+
+def cmd_lesson(args):
+    root = find_repo_root()
+    lessons_file = root / ".kairos" / "lessons.md"
+
+    if args.action == "list":
+        if not lessons_file.exists():
+            docs_lessons = root / "docs" / "AGENT_LESSONS.md"
+            if docs_lessons.exists():
+                print(f"📖 Showing KAIROS core lessons from {docs_lessons.relative_to(root)}:\n")
+                print(docs_lessons.read_text(encoding="utf-8")[:1200] + "\n... [read docs/AGENT_LESSONS.md for full catalog]")
+                return 0
+            print("ℹ️ No lessons recorded yet in .kairos/lessons.md.")
+            return 0
+        print(f"📖 In-Repo Living Lessons ({lessons_file.relative_to(root)}):\n")
+        print(lessons_file.read_text(encoding="utf-8"))
+        return 0
+
+    elif args.action == "add":
+        if not args.title or not args.rule:
+            print("❌ Both --title and --rule are required to add a lesson.")
+            return 1
+        
+        lessons_file.parent.mkdir(parents=True, exist_ok=True)
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        trap_line = f"* **The Trap:** {args.trap}\n" if getattr(args, "trap", None) else ""
+        entry = f"\n## Lesson: {args.title} ({date_str})\n{trap_line}* **The KAIROS Directive:** {args.rule}\n"
+        with open(lessons_file, "a", encoding="utf-8") as f:
+            f.write(entry)
+        print(f"✅ Lesson recorded in {lessons_file.relative_to(root)}: '{args.title}'")
+        return 0
+    return 0
+
+# ---------------------------------------------------------------------------
 # COMMAND: STATUS & TELEMETRY
 # ---------------------------------------------------------------------------
 
@@ -1120,6 +1156,13 @@ def main():
     # Registry
     subparsers.add_parser("registry", help="Discover and list registered agents and skills")
 
+    # Lesson
+    p_les = subparsers.add_parser("lesson", help="Manage in-repo continuous learning lessons (.kairos/lessons.md)")
+    p_les.add_argument("action", choices=["list", "add"], help="Lesson action (list, add)")
+    p_les.add_argument("--title", help="Lesson title")
+    p_les.add_argument("--trap", help="Trap or failure mode description")
+    p_les.add_argument("--rule", help="KAIROS directive or preventive rule")
+
     args = parser.parse_args()
 
     dispatch = {
@@ -1136,6 +1179,7 @@ def main():
         "mutate": cmd_mutate,
         "update": cmd_update,
         "registry": cmd_registry,
+        "lesson": cmd_lesson,
     }
 
     try:

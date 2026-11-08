@@ -1,6 +1,7 @@
 import unittest
 import sys
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -10,11 +11,18 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from kairos_cli import (
     cmd_status, cmd_rollback, cmd_mutate, cmd_token, cmd_spec,
-    cmd_update, cmd_registry,
+    cmd_update, cmd_registry, cmd_lesson,
     scan_diff_text, save_state, load_state, get_kairos_dir, MUTATION_OPS
 )
 
 class TestKairosFeatures(unittest.TestCase):
+
+    def setUp(self):
+        self.original_cwd = os.getcwd()
+        os.chdir(REPO_ROOT)
+
+    def tearDown(self):
+        os.chdir(self.original_cwd)
 
     def test_visual_dashboard_flag_exists(self):
         """Test that --dashboard can be called on status."""
@@ -137,6 +145,10 @@ class TestKairosFeatures(unittest.TestCase):
         cmd_spec(MockArgs())
         evil_leak = Path("/tmp/evil_escape_test")
         self.assertFalse(evil_leak.exists(), "Path traversal escaped into /tmp!")
+        # Clean up test directories created in .kairos/changes
+        for p in (REPO_ROOT / ".kairos" / "changes").glob("*evil_escape_test*"):
+            if p.is_dir():
+                shutil.rmtree(p)
 
     def test_token_add_rejects_negative_values(self):
         """ROUND 2 RISK-01: cmd_token add must reject negative values."""
@@ -225,6 +237,31 @@ deleted file mode 100644
             skip_self_test = True
         exit_code = cmd_update(MockArgs())
         self.assertEqual(exit_code, 0)
+
+    def test_lesson_add_and_list(self):
+        """Test that kairos lesson can record a new lesson and list existing ones."""
+        lessons_path = REPO_ROOT / ".kairos" / "lessons.md"
+        backup_content = lessons_path.read_text(encoding="utf-8") if lessons_path.exists() else None
+        try:
+            class MockAddArgs:
+                action = "add"
+                title = "Test Jest InBand"
+                trap = "Jest races on shared SQLite"
+                rule = "Run jest with --runInBand"
+            exit_code = cmd_lesson(MockAddArgs())
+            self.assertEqual(exit_code, 0)
+            self.assertTrue(lessons_path.exists())
+            self.assertIn("Test Jest InBand", lessons_path.read_text(encoding="utf-8"))
+
+            class MockListArgs:
+                action = "list"
+            exit_code = cmd_lesson(MockListArgs())
+            self.assertEqual(exit_code, 0)
+        finally:
+            if backup_content is not None:
+                lessons_path.write_text(backup_content, encoding="utf-8")
+            elif lessons_path.exists():
+                lessons_path.unlink()
 
 if __name__ == "__main__":
     unittest.main()
