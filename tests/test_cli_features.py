@@ -11,7 +11,8 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from kairos_cli import (
     cmd_status, cmd_rollback, cmd_mutate, cmd_token, cmd_spec,
-    cmd_update, cmd_registry, cmd_lesson,
+    cmd_update, cmd_registry, cmd_lesson, cmd_scout,
+    parse_project_dependencies, HIGH_RISK_CUTOFF_PACKAGES,
     scan_diff_text, save_state, load_state, get_kairos_dir, MUTATION_OPS
 )
 
@@ -262,6 +263,33 @@ deleted file mode 100644
                 lessons_path.write_text(backup_content, encoding="utf-8")
             elif lessons_path.exists():
                 lessons_path.unlink()
+
+    def test_scout_detects_cutoff_risk_packages(self):
+        """Test that parse_project_dependencies extracts cutoff packages from manifest."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            pkg_json = tmppath / "package.json"
+            pkg_json.write_text('{"dependencies": {"next": "15.0.1", "react": "19.0.0", "lodash": "4.17.21"}}', encoding="utf-8")
+            
+            manifests, deps = parse_project_dependencies(tmppath)
+            self.assertIn("package.json", manifests)
+            self.assertIn("next", deps)
+            self.assertIn("react", deps)
+            self.assertEqual(deps["next"][1], "15.0.1")
+            
+            # Check risk matching
+            risks = [k for k in deps if k in HIGH_RISK_CUTOFF_PACKAGES]
+            self.assertIn("next", risks)
+            self.assertIn("react", risks)
+
+    def test_scout_cli_execution(self):
+        """Test that kairos scout runs cleanly."""
+        class MockArgs:
+            all = True
+            save_spec = False
+        exit_code = cmd_scout(MockArgs())
+        self.assertEqual(exit_code, 0)
 
 if __name__ == "__main__":
     unittest.main()

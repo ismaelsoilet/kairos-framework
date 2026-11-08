@@ -875,6 +875,190 @@ def cmd_lesson(args):
     return 0
 
 # ---------------------------------------------------------------------------
+# COMMAND: SCOUT (Technology Scout & Anti-Cutoff Reconnaissance)
+# ---------------------------------------------------------------------------
+
+HIGH_RISK_CUTOFF_PACKAGES = {
+    "pydantic": "Breaking changes between v1 and v2 (.dict() removed, use .model_dump())",
+    "next": "App Router vs Pages Router, async headers in v15",
+    "react": "React 19 removals (forwardRef, useActionState, actions)",
+    "vue": "Vue 2 Options API vs Vue 3 Composition API & script setup",
+    "tailwind": "Tailwind v4 CSS-first config vs v3 tailwind.config.js",
+    "tailwindcss": "Tailwind v4 CSS-first config vs v3 tailwind.config.js",
+    "langchain": "Massive package split into langchain-core, langchain-community, 0.3+ imports",
+    "openai": "SDK v1.0+ rewrite (client.chat.completions.create)",
+    "google-genai": "Modern Google GenAI SDK (google.genai.Client) vs legacy google.generativeai",
+    "@google/genai": "Modern Google GenAI SDK vs legacy @google/generative-ai",
+    "flutter": "Material 3 defaults, Dart 3 pattern matching, accentColor removed",
+    "fastapi": "Pydantic v2 integration, Lifespan handlers replacing on_event",
+    "nestjs": "NestJS v10+ modern rxjs, express v5 compatibility",
+    "astro": "Astro v4/v5 content layer and server islands",
+    "vite": "Vite v5/v6 Rollup 4 adoption, SSR manifest updates"
+}
+
+def parse_project_dependencies(root: Path):
+    """Scan and parse dependency manifests across multiple languages."""
+    manifests_found = []
+    deps = {}
+
+    # 1. Node.js (package.json)
+    pkg_json = root / "package.json"
+    if pkg_json.exists():
+        manifests_found.append("package.json")
+        try:
+            data = json.loads(pkg_json.read_text(encoding="utf-8"))
+            for name, ver in {**data.get("dependencies", {}), **data.get("devDependencies", {})}.items():
+                deps[name.lower()] = (name, str(ver), "package.json")
+        except Exception:
+            pass
+
+    # 2. Python (pyproject.toml)
+    pyproj = root / "pyproject.toml"
+    if pyproj.exists():
+        manifests_found.append("pyproject.toml")
+        try:
+            content = pyproj.read_text(encoding="utf-8")
+            for m in re.finditer(r'["\']([a-zA-Z0-9_\-]+)\s*([=<>!~^]+[^"\']*)?["\']', content):
+                name = m.group(1).lower()
+                ver = m.group(2) or "any"
+                if name not in deps:
+                    deps[name] = (m.group(1), ver, "pyproject.toml")
+        except Exception:
+            pass
+
+    # 3. Python (requirements.txt)
+    reqs = root / "requirements.txt"
+    if reqs.exists():
+        manifests_found.append("requirements.txt")
+        try:
+            for line in reqs.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    m = re.match(r"^([a-zA-Z0-9_\-]+)([=<>!~]+.*)?$", line)
+                    if m:
+                        name = m.group(1).lower()
+                        ver = m.group(2) or "any"
+                        deps[name] = (m.group(1), ver, "requirements.txt")
+        except Exception:
+            pass
+
+    # 4. Dart / Flutter (pubspec.yaml)
+    pubspec = root / "pubspec.yaml"
+    if pubspec.exists():
+        manifests_found.append("pubspec.yaml")
+        try:
+            content = pubspec.read_text(encoding="utf-8")
+            for line in content.splitlines():
+                m = re.match(r"^\s{2}([a-zA-Z0-9_]+):\s*[\^~]?([0-9\.\-]+.*)?$", line)
+                if m:
+                    name = m.group(1).lower()
+                    ver = m.group(2) or "any"
+                    deps[name] = (m.group(1), ver, "pubspec.yaml")
+        except Exception:
+            pass
+
+    # 5. Rust (Cargo.toml)
+    cargo = root / "Cargo.toml"
+    if cargo.exists():
+        manifests_found.append("Cargo.toml")
+        try:
+            content = cargo.read_text(encoding="utf-8")
+            for m in re.finditer(r'([a-zA-Z0-9_\-]+)\s*=\s*["\']([^"\']+)["\']', content):
+                name = m.group(1).lower()
+                ver = m.group(2)
+                deps[name] = (m.group(1), ver, "Cargo.toml")
+        except Exception:
+            pass
+
+    # 6. Go (go.mod)
+    gomod = root / "go.mod"
+    if gomod.exists():
+        manifests_found.append("go.mod")
+        try:
+            content = gomod.read_text(encoding="utf-8")
+            for m in re.finditer(r'([a-zA-Z0-9_\-\./]+)\s+v([0-9\.\-]+)', content):
+                name = m.group(1).split("/")[-1].lower()
+                ver = "v" + m.group(2)
+                deps[name] = (m.group(1), ver, "go.mod")
+        except Exception:
+            pass
+
+    return manifests_found, deps
+
+def cmd_scout(args):
+    root = find_repo_root()
+    manifests, deps = parse_project_dependencies(root)
+
+    print("=================================================================")
+    print("🔭 KAIROS SCOUT: TECH STACK & ANTI-CUTOFF RECONNAISSANCE")
+    print("=================================================================")
+
+    if not manifests:
+        print("ℹ️ No standard dependency manifests detected in project root.")
+        print("   (Checked package.json, pyproject.toml, requirements.txt, pubspec.yaml, Cargo.toml, go.mod)")
+        return 0
+
+    print(f"📦 Manifests detected: {', '.join(manifests)}")
+    print(f"📊 Total dependencies indexed: {len(deps)}\n")
+
+    cutoff_risks = []
+    for key, (orig_name, ver, manifest) in deps.items():
+        if key in HIGH_RISK_CUTOFF_PACKAGES:
+            cutoff_risks.append((orig_name, ver, manifest, HIGH_RISK_CUTOFF_PACKAGES[key]))
+
+    if cutoff_risks:
+        print("🚨 HIGH KNOWLEDGE-CUTOFF RISKS DETECTED:")
+        print("-----------------------------------------------------------------")
+        for name, ver, manifest, advice in cutoff_risks:
+            print(f"  ⚠️  {name} ({ver}) [from {manifest}]")
+            print(f"     └─ Risk: {advice}")
+        print("-----------------------------------------------------------------")
+        print("💡 Directive for Agent:")
+        print("   • Do NOT guess APIs for these packages based on training weights!")
+        print("   • Run `kairos_scout` or verify method signatures in local types / live docs.")
+    else:
+        print("✅ No known high-risk knowledge cutoff libraries flagged.")
+
+    if getattr(args, "all", False):
+        print("\n📋 All Indexed Dependencies:")
+        for name, ver, manifest in sorted(deps.values(), key=lambda x: x[0].lower()):
+            print(f"  • {name:<25} {ver:<15} ({manifest})")
+
+    if getattr(args, "save_spec", False):
+        k_dir = get_kairos_dir(root)
+        changes_dir = k_dir / "changes"
+        if changes_dir.exists():
+            active_changes = sorted([d for d in changes_dir.iterdir() if d.is_dir()], reverse=True)
+            if active_changes:
+                target_change = active_changes[0]
+                research_file = target_change / "research.md"
+                content = f"""# KAIROS Research Brief: {target_change.name}
+Generated by `kairos scout` on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+## Manifest Reconnaissance
+* **Manifests Found:** {', '.join(manifests)}
+* **Total Packages:** {len(deps)}
+
+## High-Risk Knowledge Cutoff Packages
+"""
+                if cutoff_risks:
+                    for name, ver, manifest, advice in cutoff_risks:
+                        content += f"- **{name}** (`{ver}` in `{manifest}`): {advice}\n"
+                else:
+                    content += "No high-risk cutoff libraries flagged.\n"
+
+                content += """
+## Negative Directives for kairos_worker
+- Do NOT guess deprecated methods.
+- Verify live docs or local type definitions before implementing external calls.
+"""
+                research_file.write_text(content, encoding="utf-8")
+                print(f"\n📝 Research brief saved to: {research_file.relative_to(root)}")
+
+    print("=================================================================")
+    return 0
+
+# ---------------------------------------------------------------------------
 # COMMAND: STATUS & TELEMETRY
 # ---------------------------------------------------------------------------
 
@@ -1163,6 +1347,11 @@ def main():
     p_les.add_argument("--trap", help="Trap or failure mode description")
     p_les.add_argument("--rule", help="KAIROS directive or preventive rule")
 
+    # Scout
+    p_scout = subparsers.add_parser("scout", help="Inspect tech stack manifests, detect knowledge cutoff risks, and scaffold research.md")
+    p_scout.add_argument("--all", action="store_true", help="Display all indexed dependencies")
+    p_scout.add_argument("--save-spec", action="store_true", help="Save research findings to active Delta Spec's research.md")
+
     args = parser.parse_args()
 
     dispatch = {
@@ -1180,6 +1369,7 @@ def main():
         "update": cmd_update,
         "registry": cmd_registry,
         "lesson": cmd_lesson,
+        "scout": cmd_scout,
     }
 
     try:
