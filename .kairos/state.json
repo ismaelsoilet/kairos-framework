@@ -1,8 +1,8 @@
 {
   "version": "1.0.0",
   "created_at": "2026-11-07T18:52:44.276385",
-  "current_stage": "SHIPPED",
-  "active_change": null,
+  "current_stage": "VERIFIED",
+  "active_change": "20261107_224306_evil_escape_test",
   "mode": "gamma",
   "active_worktree": null,
   "token_budget": 180000,

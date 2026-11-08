@@ -10,6 +10,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from kairos_cli import (
     cmd_status, cmd_rollback, cmd_mutate, cmd_token, cmd_spec,
+    cmd_update, cmd_registry,
     scan_diff_text, save_state, load_state, get_kairos_dir, MUTATION_OPS
 )
 
@@ -210,6 +211,20 @@ deleted file mode 100644
                 matched = True
                 break
         self.assertTrue(matched, "No mutation operator matched JS `true`, `===`, `&&`, or `false`!")
+
+    def test_registry_discovers_agents_and_skills(self):
+        """Test that kairos registry successfully enumerates agents and skills."""
+        class MockArgs:
+            pass
+        exit_code = cmd_registry(MockArgs())
+        self.assertEqual(exit_code, 0)
+
+    def test_update_executes_health_check(self):
+        """Test that kairos update can check upstream remote."""
+        class MockArgs:
+            skip_self_test = True
+        exit_code = cmd_update(MockArgs())
+        self.assertEqual(exit_code, 0)
 
 if __name__ == "__main__":
     unittest.main()

@@ -726,6 +726,119 @@ Always uphold the KAIROS Elastic Engine:
     return 0
 
 # ---------------------------------------------------------------------------
+# COMMAND: UPDATE (Self-Update & Upstream Synchronization)
+# ---------------------------------------------------------------------------
+
+def cmd_update(args):
+    root = find_repo_root()
+    print("🔄 Checking for KAIROS framework updates from upstream...")
+    
+    # 1. Verify remote origin exists
+    remotes = subprocess.run(["git", "remote"], capture_output=True, text=True, cwd=root)
+    if "origin" not in remotes.stdout.split():
+        print("⚠️ No 'origin' remote found. To set upstream:")
+        print("   git remote add origin https://github.com/ismaelsoilet/kairos-framework.git")
+        return 1
+
+    try:
+        # 2. Fetch updates
+        print("📡 Fetching latest commits from origin/main...")
+        subprocess.run(["git", "fetch", "origin", "main"], check=True, cwd=root, stdout=subprocess.DEVNULL)
+        
+        # 3. Check diff between HEAD and origin/main
+        local_hash = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True, cwd=root).stdout.strip()
+        remote_hash = subprocess.run(["git", "rev-parse", "origin/main"], capture_output=True, text=True, check=True, cwd=root).stdout.strip()
+        
+        if local_hash == remote_hash:
+            print(f"✨ KAIROS is already up-to-date at commit {local_hash[:7]}.")
+        else:
+            print(f"📦 Upstream update found ({local_hash[:7]} -> {remote_hash[:7]}). Pulling changes...")
+            subprocess.run(["git", "pull", "--ff-only", "origin", "main"], check=True, cwd=root)
+            print("✅ Successfully updated local repository.")
+
+        # 4. Sync to global plugin if installed in ~/.gemini/config/plugins/kairos
+        global_plugin = Path.home() / ".gemini" / "config" / "plugins" / "kairos"
+        if global_plugin.exists():
+            for subfolder in ["scripts", "rules", "docs", "skills", "agents"]:
+                src = root / subfolder
+                dst = global_plugin / subfolder
+                if src.exists():
+                    shutil.copytree(src, dst, dirs_exist_ok=True)
+            for fname in ["README.md", "README.pt-br.md"]:
+                if (root / fname).exists():
+                    shutil.copy2(root / fname, global_plugin / fname)
+            print("🔗 Synced latest KAIROS rules and scripts to global plugin environment.")
+
+        # 5. Run health self-test
+        if not getattr(args, "skip_self_test", False):
+            print("🧪 Running self-test suite to verify update integrity...")
+            test_run = subprocess.run([sys.executable, "-m", "unittest", "tests/test_cli_features.py"],
+                                      cwd=root, capture_output=True, text=True)
+            if test_run.returncode == 0:
+                print("🛡️  Self-test passed: 100% healthy.")
+                return 0
+            else:
+                print("⚠️ Self-test reported issues after update:")
+                print(test_run.stdout)
+                return 1
+        return 0
+    except Exception as e:
+        print(f"❌ Update failed: {e}")
+        return 1
+
+# ---------------------------------------------------------------------------
+# COMMAND: REGISTRY (Agents & Skills Ecosystem)
+# ---------------------------------------------------------------------------
+
+def cmd_registry(args):
+    root = find_repo_root()
+    
+    print("=================================================================")
+    print("🧩 KAIROS AGENTS & SKILLS REGISTRY")
+    print("=================================================================")
+
+    # 1. Discover Agents
+    agents = []
+    agent_dirs = [root / "agents", root / ".kairos" / "agents"]
+    for adir in agent_dirs:
+        if adir.exists():
+            for f in adir.glob("*.md"):
+                content = f.read_text(encoding="utf-8")
+                desc_match = re.search(r"description:\s*[\"']?([^\"'\n]+)", content)
+                desc = desc_match.group(1) if desc_match else "Custom Agent"
+                agents.append((f.stem, desc, str(f.relative_to(root))))
+
+    # 2. Discover Skills
+    skills = []
+    skill_dirs = [root / "skills", root / ".kairos" / "skills"]
+    for sdir in skill_dirs:
+        if sdir.exists():
+            for item in sdir.iterdir():
+                if item.is_dir() and (item / "SKILL.md").exists():
+                    content = (item / "SKILL.md").read_text(encoding="utf-8")
+                    desc_match = re.search(r"description:\s*[\"']?([^\"'\n]+)", content)
+                    desc = desc_match.group(1) if desc_match else "Agent Skill"
+                    skills.append((item.name, desc, str(item.relative_to(root))))
+
+    print("🤖 REGISTERED AGENT PERSONAS:")
+    for name, desc, path in agents:
+        print(f"  • {name:<22} ({path})")
+        print(f"    └─ {desc[:80]}")
+
+    print("\n⚡ REGISTERED SKILLS:")
+    for name, desc, path in skills:
+        print(f"  • {name:<22} ({path})")
+        print(f"    └─ {desc[:80]}")
+
+    print("-----------------------------------------------------------------")
+    print("💡 Extension Guide:")
+    print("  • To add an agent: create `agents/<name>.md` or `.kairos/agents/<name>.md`")
+    print("  • To add a skill: create `skills/<name>/SKILL.md` or `.kairos/skills/<name>/SKILL.md`")
+    print("  • KAIROS stages automatically load matching skills via the Elastic Dial.")
+    print("=================================================================")
+    return 0
+
+# ---------------------------------------------------------------------------
 # COMMAND: STATUS & TELEMETRY
 # ---------------------------------------------------------------------------
 
@@ -1000,6 +1113,13 @@ def main():
     p_mut.add_argument("--max-mutants", type=int, default=10, help="Max mutants to test")
     p_mut.add_argument("--timeout", type=int, default=15, help="Timeout in seconds per mutant run (prevents infinite loop hang)")
 
+    # Update
+    p_upd = subparsers.add_parser("update", help="Update KAIROS CLI and rules from upstream repository")
+    p_upd.add_argument("--skip-self-test", action="store_true", help="Skip running test suite after update")
+
+    # Registry
+    subparsers.add_parser("registry", help="Discover and list registered agents and skills")
+
     args = parser.parse_args()
 
     dispatch = {
@@ -1014,6 +1134,8 @@ def main():
         "token": cmd_token,
         "rollback": cmd_rollback,
         "mutate": cmd_mutate,
+        "update": cmd_update,
+        "registry": cmd_registry,
     }
 
     try:
