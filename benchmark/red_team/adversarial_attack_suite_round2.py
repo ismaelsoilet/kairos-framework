@@ -17,6 +17,7 @@ from kairos_cli import scan_diff_text, load_state, save_state, cmd_token, cmd_sp
 
 def test_vector_path_traversal_and_injection():
     print("▶ VETOR 1: Testando Path Traversal e Injeção de Caracteres em Nomes de Spec e Branch...")
+    orig_state = load_state(REPO_ROOT)
     
     # Attack 1A: Path traversal in spec name
     traversal_name = "../../../tmp/kairos_evil_escape"
@@ -39,6 +40,8 @@ def test_vector_path_traversal_and_injection():
     except Exception as e:
         print(f"  [Ataque 1A] Exceção levantada: 🛡️ BARROU ({e})")
         escaped = False
+    finally:
+        save_state(orig_state, REPO_ROOT)
 
     # Attack 1B: Invalid branch characters in name
     invalid_names = ["bad..branch", "head~1", "branch with spaces", "test:colon"]
@@ -144,35 +147,38 @@ def main():
     print("==========================================================================")
     print("⚔️  KAIROS RED TEAM ADVERSARIAL ATTACK SUITE - ROUND 2 (DEEP PENETRATION)")
     print("==========================================================================")
+    orig_state = load_state(REPO_ROOT)
+    try:
+        res1 = test_vector_path_traversal_and_injection()
+        res2 = test_vector_infinite_loop_in_mutation()
+        res3 = test_vector_token_budget_tampering()
+        res4 = test_vector_advanced_audit_evasions()
 
-    res1 = test_vector_path_traversal_and_injection()
-    res2 = test_vector_infinite_loop_in_mutation()
-    res3 = test_vector_token_budget_tampering()
-    res4 = test_vector_advanced_audit_evasions()
+        print("\n==========================================================================")
+        print("📊 RESUMO DOS ACHADOS DO ROUND 2")
+        print("==========================================================================")
+        deficiencies = []
+        if not res1:
+            deficiencies.append("DEF-R2-01: Path traversal em nomes de spec permite escapar da pasta .kairos/changes/")
+        if not res2:
+            deficiencies.append("DEF-R2-02: cmd_mutate não possui timeout e trava em loops infinitos gerados por mutação.")
+        if not res3:
+            deficiencies.append("DEF-R2-03: cmd_token aceita valores negativos, permitindo mascarar estouro de tokens.")
+        if not res4.get("4A"):
+            deficiencies.append("DEF-R2-04: it.only / test.only / describe.only não são detectados pelo auditor.")
+        if not res4.get("4B"):
+            deficiencies.append("DEF-R2-05: pytest.xfail e @pytest.mark.xfail não são detectados.")
+        if not res4.get("4C"):
+            deficiencies.append("DEF-R2-06: Deleção de funções inteiras de teste (- def test_...) não é detectada se não contiver assert explícito.")
+        if not res4.get("4D"):
+            deficiencies.append("DEF-R2-07: Motor de mutação não muta booleanos JavaScript/TypeScript (true/false).")
 
-    print("\n==========================================================================")
-    print("📊 RESUMO DOS ACHADOS DO ROUND 2")
-    print("==========================================================================")
-    deficiencies = []
-    if not res1:
-        deficiencies.append("DEF-R2-01: Path traversal em nomes de spec permite escapar da pasta .kairos/changes/")
-    if not res2:
-        deficiencies.append("DEF-R2-02: cmd_mutate não possui timeout e trava em loops infinitos gerados por mutação.")
-    if not res3:
-        deficiencies.append("DEF-R2-03: cmd_token aceita valores negativos, permitindo mascarar estouro de tokens.")
-    if not res4.get("4A"):
-        deficiencies.append("DEF-R2-04: it.only / test.only / describe.only não são detectados pelo auditor.")
-    if not res4.get("4B"):
-        deficiencies.append("DEF-R2-05: pytest.xfail e @pytest.mark.xfail não são detectados.")
-    if not res4.get("4C"):
-        deficiencies.append("DEF-R2-06: Deleção de funções inteiras de teste (- def test_...) não é detectada se não contiver assert explícito.")
-    if not res4.get("4D"):
-        deficiencies.append("DEF-R2-07: Motor de mutação não muta booleanos JavaScript/TypeScript (true/false).")
-
-    print(f"Total de deficiências de Rodada 2 detectadas: {len(deficiencies)}")
-    for d in deficiencies:
-        print(f"  ⚠️  {d}")
-    print("==========================================================================")
+        print(f"Total de deficiências de Rodada 2 detectadas: {len(deficiencies)}")
+        for d in deficiencies:
+            print(f"  ⚠️  {d}")
+        print("==========================================================================")
+    finally:
+        save_state(orig_state, REPO_ROOT)
 
 if __name__ == "__main__":
     main()

@@ -143,58 +143,64 @@ def test_advanced_catch_evasions():
 
 def test_dial_security_overrides():
     print("\n▶ VETOR 5: Testando Priorização Semântica de Segurança e Finanças no Dial...")
+    orig_state = load_state(REPO_ROOT)
+    try:
+        class MockArgsWire:
+            description = ["Create", "button", "to", "execute", "funds", "wire", "transfer"]
+            force_gamma = False
+            force_beta = False
 
-    class MockArgsWire:
-        description = ["Create", "button", "to", "execute", "funds", "wire", "transfer"]
-        force_gamma = False
-        force_beta = False
+        cmd_dial(MockArgsWire())
+        state = load_state(REPO_ROOT)
+        mode_wire = state.get("mode")
+        ok_wire = mode_wire == "gamma"
 
-    cmd_dial(MockArgsWire())
-    state = load_state(REPO_ROOT)
-    mode_wire = state.get("mode")
-    ok_wire = mode_wire == "gamma"
+        class MockArgsSql:
+            description = ["Fix", "critical", "SQL", "injection", "vulnerability", "in", "search", "endpoint"]
+            force_gamma = False
+            force_beta = False
 
-    class MockArgsSql:
-        description = ["Fix", "critical", "SQL", "injection", "vulnerability", "in", "search", "endpoint"]
-        force_gamma = False
-        force_beta = False
+        cmd_dial(MockArgsSql())
+        state = load_state(REPO_ROOT)
+        mode_sql = state.get("mode")
+        ok_sql = mode_sql == "gamma"
 
-    cmd_dial(MockArgsSql())
-    state = load_state(REPO_ROOT)
-    mode_sql = state.get("mode")
-    ok_sql = mode_sql == "gamma"
-
-    all_ok = ok_wire and ok_sql
-    print(f"  [Ataque 5A] 'button to wire transfer funds' -> Modo: {mode_wire} {'🛡️ PRIORIZOU GAMMA' if ok_wire else '❌ ERRO (Caiu em Alpha!)'}")
-    print(f"  [Ataque 5B] 'SQL injection vulnerability' -> Modo: {mode_sql} {'🛡️ PRIORIZOU GAMMA' if ok_sql else '❌ ERRO (Caiu em Beta!)'}")
-    return all_ok
+        all_ok = ok_wire and ok_sql
+        print(f"  [Ataque 5A] 'button to wire transfer funds' -> Modo: {mode_wire} {'🛡️ PRIORIZOU GAMMA' if ok_wire else '❌ ERRO (Caiu em Alpha!)'}")
+        print(f"  [Ataque 5B] 'SQL injection vulnerability' -> Modo: {mode_sql} {'🛡️ PRIORIZOU GAMMA' if ok_sql else '❌ ERRO (Caiu em Beta!)'}")
+        return all_ok
+    finally:
+        save_state(orig_state, REPO_ROOT)
 
 def main():
     print("==========================================================================")
     print("⚔️  KAIROS RED TEAM ADVERSARIAL ATTACK SUITE - ROUND 3 (SUREFORGE HARDENED)")
     print("==========================================================================")
+    orig_state = load_state(REPO_ROOT)
+    try:
+        res1 = test_worktree_audit_detection()
+        res2 = test_production_code_non_interference()
+        res3 = test_magic_comment_bypass_resistance()
+        res4 = test_advanced_catch_evasions()
+        res5 = test_dial_security_overrides()
 
-    res1 = test_worktree_audit_detection()
-    res2 = test_production_code_non_interference()
-    res3 = test_magic_comment_bypass_resistance()
-    res4 = test_advanced_catch_evasions()
-    res5 = test_dial_security_overrides()
-
-    all_passed = res1 and res2 and res3 and res4 and res5
-    print("\n==========================================================================")
-    print("📊 RESUMO DOS ACHADOS DO ROUND 3")
-    print("==========================================================================")
-    if all_passed:
-        print("🏆 100% DOS VETORES ADVERSÁRIOS FORAM NEUTRALIZADOS COM SUCESSO!")
-        print("   • Worktree audit: Ativa e sem furos.")
-        print("   • Falsos positivos: Eliminados em bibliotecas ML/DB/Schema.")
-        print("   • Backdoor de comentário: Removido.")
-        print("   • Evasões de exceção (None, void 0): Detectadas.")
-        print("   • Priorização de segurança e finanças: Garantida em MODE GAMMA.")
-    else:
-        print("⚠️ Algum vetor ainda vazou. Inspecione os relatórios acima.")
-    print("==========================================================================")
-    sys.exit(0 if all_passed else 1)
+        all_passed = res1 and res2 and res3 and res4 and res5
+        print("\n==========================================================================")
+        print("📊 RESUMO DOS ACHADOS DO ROUND 3")
+        print("==========================================================================")
+        if all_passed:
+            print("🏆 100% DOS VETORES ADVERSÁRIOS FORAM NEUTRALIZADOS COM SUCESSO!")
+            print("   • Worktree audit: Ativa e sem furos.")
+            print("   • Falsos positivos: Eliminados em bibliotecas ML/DB/Schema.")
+            print("   • Backdoor de comentário: Removido.")
+            print("   • Evasões de exceção (None, void 0): Detectadas.")
+            print("   • Priorização de segurança e finanças: Garantida em MODE GAMMA.")
+        else:
+            print("⚠️ Algum vetor ainda vazou. Inspecione os relatórios acima.")
+        print("==========================================================================")
+        sys.exit(0 if all_passed else 1)
+    finally:
+        save_state(orig_state, REPO_ROOT)
 
 if __name__ == "__main__":
     main()
