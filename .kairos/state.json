@@ -1,8 +1,8 @@
 {
   "version": "1.0.0",
   "created_at": "2026-11-07T18:52:44.276385",
-  "current_stage": "VERIFIED",
-  "active_change": "20261107_224306_evil_escape_test",
+  "current_stage": "IDLE",
+  "active_change": null,
   "mode": "gamma",
   "active_worktree": null,
   "token_budget": 180000,
@@ -33,6 +33,5 @@
       "archived_at": "2026-11-07T20:30:55.586540",
       "mode": "gamma"
     }
-  ],
-  "_test_atomic_key": "atomic_value_123"
+  ]
 }
