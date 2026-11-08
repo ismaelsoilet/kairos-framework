@@ -44,7 +44,8 @@ GAMMA_KEYWORDS = [
     r"\bsql\b", r"\binjection\b", r"\bvulnerabili\w*\b", r"\bexploit\b", r"\bcve\b", r"\brce\b",
     r"\bxss\b", r"\bcsrf\b", r"\boverflow\b", r"\bmemory\s*leak\b", r"\bwire\b", r"\bfunds\b",
     r"\btransfer\b", r"\bcheckout\b", r"\bfinancial\b", r"\bcredit[_\s\-]?card\b", r"\bbank\b",
-    r"\bfinance\w*\b", r"\bwallet\b", r"\bprivilege\b", r"\bescalat\w*\b"
+    r"\bfinance\w*\b", r"\bwallet\b", r"\bprivilege\b", r"\bescalat\w*\b", r"\bledger\b",
+    r"\bsaldo\b", r"\bbalance\b"
 ]
 
 # ---------------------------------------------------------------------------
@@ -452,7 +453,7 @@ FRAUD_PATTERNS = {
         "Test skipped, disabled or commented out"
     ),
     "silent_failure_empty_catch": (
-        r"(except(\s+[A-Za-z0-9_.]+(\s+as\s+\w+)?)?\s*:\s*(pass|\.\.\.)|catch\s*(\([^\)]*\))?\s*\{\s*\})",
+        r"(except(\s+[A-Za-z0-9_.]+(\s+as\s+\w+)?)?\s*:\s*(pass|\.\.\.|None|return|continue|0|1|False|True|''|\"\"|\{\})\b|catch\s*(\([^\)]*\))?\s*\{\s*(void\s+0;?|;|return;?|return\s+null;?|return\s+undefined;?)?\s*\})",
         "Empty exception handler / Silent failure"
     ),
     "phantom_stub": (
