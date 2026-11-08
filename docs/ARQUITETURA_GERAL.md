@@ -25,7 +25,7 @@ O KAIROS é uma **Camada de Controle Cognitivo e Governança de Execução (*Cog
                     ▼                                     ▼
 +------------------------------------+  +------------------------------------+
 |     MODELO DE FRONTEIRA (LLM)      |  |     SISTEMA OPERACIONAL & GIT      |
-|  (Gemini 3.8 / Claude 3.7 / GPT-4o)|  |  • Git Worktrees isoladas          |
+|  (Claude 3.7 / Gemini 2.5 / OpenAI o3)|  |  • Git Worktrees isoladas          |
 |  • Raciocínio profundo             |  |  • Runners de teste (pytest/jest)  |
 |  • Geração cirúrgica               |  |  • Scanner de Diffs (KAIROS CLI)   |
 +------------------------------------+  +------------------------------------+

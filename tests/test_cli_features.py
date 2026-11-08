@@ -291,5 +291,29 @@ deleted file mode 100644
         exit_code = cmd_scout(MockArgs())
         self.assertEqual(exit_code, 0)
 
+    def test_diff_scanner_catches_obsolete_model_in_markdown(self):
+        """Audit scanner must catch hallucinated or obsolete model references in docs."""
+        diff = """diff --git a/docs/guide.md b/docs/guide.md
+--- a/docs/guide.md
++++ b/docs/guide.md
+@@ -10,3 +10,4 @@
++We recommend using Gemini 3.8 or OpenAI Codex for this task.
+"""
+        violations = scan_diff_text(diff)
+        fraud_types = [v["fraud_type"] for v in violations]
+        self.assertIn("obsolete_ai_model_reference", fraud_types)
+
+    def test_diff_scanner_catches_obsolete_model_in_code(self):
+        """Audit scanner must catch deprecated model references in source code."""
+        diff = """diff --git a/src/llm.py b/src/llm.py
+--- a/src/llm.py
++++ b/src/llm.py
+@@ -5,2 +5,3 @@
++MODEL_NAME = "text-davinci-003"
+"""
+        violations = scan_diff_text(diff)
+        fraud_types = [v["fraud_type"] for v in violations]
+        self.assertIn("obsolete_ai_model_reference", fraud_types)
+
 if __name__ == "__main__":
     unittest.main()

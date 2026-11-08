@@ -5,7 +5,7 @@
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Python: 3.10+](https://img.shields.io/badge/Python-3.10%2B-green.svg)](https://python.org)
-[![Harness: Multi-Agent](https://img.shields.io/badge/Harness-Universal%20%28Antigravity%20%7C%20Claude%20%7C%20Cursor%20%7C%20Codex%29-orange.svg)](docs/ARCHITECTURE.md)
+[![Harness: Multi-Agent](https://img.shields.io/badge/Harness-Universal%20%28Antigravity%20%7C%20Claude%20Code%20%7C%20Cursor%20%7C%20Windsurf%29-orange.svg)](docs/ARCHITECTURE.md)
 [![Fraud Detection: 100%](https://img.shields.io/badge/K--Bench%20Fraud%20Catch-100%25-brightgreen.svg)](benchmark/runner.py)
 
 ---
@@ -61,7 +61,7 @@ To ensure absolute engineering clarity, KAIROS maintains unambiguous boundaries:
 10. **Native Extensibility & Self-Updating:** Seamlessly updates from upstream (`kairos update`) and dynamically discovers pluggable agents and skills (`kairos registry`).
 
 ### ❌ What KAIROS DOES NOT DO:
-1. **It is NOT a Foundation Model:** KAIROS does not generate tokens on its own; it is a governance and orchestration engine that disciplines frontier models (Gemini 3.8, Claude 3.7/Opus, GPT-4o/Codex).
+1. **It is NOT a Foundation Model:** KAIROS does not generate tokens on its own; it is a governance and orchestration engine that disciplines Frontier Reasoning and Coding Models (e.g., Claude 3.7 Sonnet, Gemini 2.5 Pro/Flash, OpenAI o3/o1, DeepSeek-R1).
 2. **It Does NOT Guess Product Vision:** KAIROS will not invent business rules or make strategic product decisions. It forces human approval at specification gates.
 3. **It is NOT a Generic Static Linter:** It does not replace SonarQube or ESLint. KAIROS specializes in **behavioral integrity, intent compliance, and AI-induced hallucinations/frauds**.
 4. **It Does NOT Accept Verbal Claims:** Phrases like *"all tests pass"* or *"implementation complete"* have zero value without real bash stdout evidence and clean diff inspection.
@@ -190,7 +190,7 @@ python3 scripts/kairos_cli.py export all
 ```
 * **Claude Code:** Creates `CLAUDE.md` and `.claude/`.
 * **Cursor IDE:** Creates `.cursorrules` and `.cursor/rules/`.
-* **OpenAI Codex / Gemini CLI / Windsurf / Roo Code:** Creates `AGENTS.md`.
+* **Universal Agents (Windsurf / Gemini CLI / OpenAI / Roo Code):** Creates `AGENTS.md`.
 
 ---
 

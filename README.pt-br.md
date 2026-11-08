@@ -5,7 +5,7 @@
 
 [![Licença: Apache-2.0](https://img.shields.io/badge/Licen%C3%A7a-Apache%202.0-blue.svg)](LICENSE)
 [![Python: 3.10+](https://img.shields.io/badge/Python-3.10%2B-green.svg)](https://python.org)
-[![Harness: Multi-Agente](https://img.shields.io/badge/Harness-Universal%20%28Antigravity%20%7C%20Claude%20%7C%20Cursor%20%7C%20Codex%29-orange.svg)](docs/ARCHITECTURE.md)
+[![Harness: Multi-Agente](https://img.shields.io/badge/Harness-Universal%20%28Antigravity%20%7C%20Claude%20Code%20%7C%20Cursor%20%7C%20Windsurf%29-orange.svg)](docs/ARCHITECTURE.md)
 [![Detecção de Fraudes: 100%](https://img.shields.io/badge/K--Bench%20Fraudes-100%25%20Barradas-brightgreen.svg)](benchmark/runner.py)
 
 ---
@@ -61,7 +61,7 @@ Para evitar ilusões ou superengenharia, o KAIROS define fronteiras operacionais
 10. **Extensibilidade Nativa e Auto-Atualização:** Atualiza-se diretamente do repositório upstream oficial (`kairos update`) e descobre dinamicamente agentes e skills plugáveis (`kairos registry`).
 
 ### ❌ O QUE O KAIROS NÃO FAZ:
-1. **NÃO é um Modelo de Linguagem Próprio:** O KAIROS não gera tokens por conta própria; é uma camada de controle e governança que disciplina modelos de fronteira (Gemini 3.8, Claude 3.7/Opus, GPT-4o/Codex).
+1. **NÃO é um Modelo de Linguagem Próprio:** O KAIROS não gera tokens por conta própria; é uma camada de controle e governança que disciplina Modelos de Fronteira e Raciocínio (ex: Claude 3.7 Sonnet, Gemini 2.5 Pro/Flash, OpenAI o3/o1, DeepSeek-R1).
 2. **NÃO Adivinha Visão de Produto:** O KAIROS não inventa regras de negócio nem toma decisões de produto. Ele exige aprovação humana nos portões de especificação.
 3. **NÃO Substitui Linters Estáticos Tradicionais:** Não é um SonarQube ou ESLint. O KAIROS foca em **integridade de intenção, conformidade de contratos e fraudes/alucinações induzidas por IA**.
 4. **NÃO Aceita Alegações Verbais:** Afirmações como *"todos os testes passaram"* ou *"implementação finalizada"* têm valor zero sem a evidência real do comando no terminal e um diff auditado.
@@ -190,7 +190,7 @@ python3 scripts/kairos_cli.py export all
 ```
 * **Claude Code:** Cria `CLAUDE.md` e `.claude/`.
 * **Cursor IDE:** Cria `.cursorrules` e `.cursor/rules/`.
-* **OpenAI Codex / Gemini CLI / Windsurf / Roo Code:** Cria `AGENTS.md`.
+* **Agentes Universais (Windsurf / Gemini CLI / OpenAI / Roo Code):** Cria `AGENTS.md`.
 
 ---
 

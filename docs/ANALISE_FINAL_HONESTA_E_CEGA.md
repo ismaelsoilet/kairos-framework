@@ -45,7 +45,7 @@ flowchart TD
 1. **Um Cinto de Segurança e Árbitro Operacional para IAs Codificadoras:** O KAIROS é um protocolo de SDLC (Software Development Life Cycle) e um runtime em Python puro (`scripts/kairos_cli.py`) que governa o ciclo de vida da tarefa: da classificação da demanda à entrega final.
 2. **Um Motor Antifraude de Diffs:** Um scanner determinístico que inspeciona o `git diff` antes de qualquer commit, bloqueando ativamente as 6 fraudes clássicas cometidas por LLMs quando pressionados por tempo ou contexto (testes comentados, `try/catch` vazios, funções stub, falsas asserções, testes focalizados `.only` e `xfail`).
 3. **Um Governador Elástico de Tokens:** Um mecanismo de controle orçamentário que calibra a carga de trabalho de acordo com o risco (Mode Alpha para UI/estilo, Beta para brownfield padrão, Gamma para segurança/concorrência).
-4. **Uma Arquitetura Agnóstica e Portável:** Opera em Antigravity (Google), Claude Code (Anthropic), Cursor (OpenAI/Anthropic) e Codex com zero dependências externas (`pip install` desnecessário).
+4. **Uma Arquitetura Agnóstica e Portável:** Opera em Antigravity (Google), Claude Code (Anthropic), Cursor (OpenAI/Anthropic) e Windsurf / Agentes Universais com zero dependências externas (`pip install` desnecessário).
 
 ### ❌ O Que o KAIROS NÃO É:
 1. **NÃO é um LLM:** O KAIROS não gera código sozinho; ele direciona e fiscaliza o LLM que você utiliza.
@@ -164,7 +164,7 @@ Desenvolvedores acostumados a apenas "pedir para o chat consertar o código" pod
 | **Dicotomia Cognitiva** | Nenhuma | Subagentes paralelos genéricos | Elephant / Goldfish conceituais | **Elephant (Design) & Goldfish (Crítica Hostil)** |
 | **Teste de Mutação** | Inexistente | Depende de ferramentas pesadas de terceiros | Inexistente | **K-Mutant nativo integrado com timeout** |
 | **Controle de Estado** | Nenhum | Arquivos temporários dispersos | Specs em markdown | **Atômico (`state.json` + Dashboard ASCII)** |
-| **Portabilidade** | Preso à IDE dona | Preso ao harness específico | Portável | **Universal (Antigravity, Claude, Cursor, Codex)** |
+| **Portabilidade** | Preso à IDE dona | Preso ao harness específico | Portável | **Universal (Antigravity, Claude Code, Cursor, Windsurf)** |
 | **Custo de Setup** | Zero | Médio (vários plugins) | Baixo | **Zero (Zero dependências pip/npm)** |
 
 ---

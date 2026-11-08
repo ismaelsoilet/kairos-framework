@@ -22,7 +22,7 @@ Every response or milestone turn operating under KAIROS governance **MUST displa
 ```text
 ⚡ [KAIROS | Stage: <STAGE> | Mode: <MODE> | Tokens: <CONSUMED>/<CAP> tok | Left: <REMAINING>]
 ```
-* **Stages:** `IDLE` -> `CLASSIFIED` -> `SPECIFYING` -> `BUILDING` -> `AUDITING` -> `VERIFIED` -> `SHIPPED`.
+* **Stages:** `IDLE` -> `CLASSIFIED` -> `RESEARCHING` -> `BRAINSTORMING` -> `SPECIFYING` -> `BUILDING` -> `AUDITING` -> `VERIFIED` -> `SHIPPED`.
 * Run `python3 scripts/kairos_cli.py status --header-only` to get the exact header string.
 
 ---
@@ -70,7 +70,7 @@ Before executing any request, calibrate the task risk and determine the **Execut
 6. **Mantém Documentação Viva:** Transforma requisitos em Delta Specs e atualiza a base canônica (`.kairos/specs/`).
 
 ### ❌ O QUE O KAIROS NÃO FAZ:
-1. **NÃO é um LLM próprio:** O KAIROS não gera tokens por si só; ele governa e orquestra o LLM que você utiliza (Gemini, Claude, GPT).
+1. **NÃO é um LLM próprio:** O KAIROS não gera tokens por si só; ele governa e orquestra Modelos de Fronteira e Raciocínio (ex: Claude, Gemini, OpenAI, DeepSeek).
 2. **NÃO adivinha visão de produto:** Ele não toma decisões de negócio pelo usuário. Ele exige aprovação humana nos portões de especificação.
 3. **NÃO substitui linters de compilador:** Ele não é um SonarQube; ele foca em integridade de intenção, regressões comportamentais e desvios de IA.
 4. **NÃO aceita conclusões verbais:** "Está pronto", "tudo funcionando" ou "testes passaram" não têm valor sem a saída do comando no terminal.

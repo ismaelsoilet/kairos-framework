@@ -40,7 +40,7 @@ O desenvolvimento assistido por agentes de IA dividiu-se em 3 grandes ondas:
 3. **Independência e Zero-Dependency:**
    * KAIROS roda em qualquer máquina Linux/macOS/Windows que possua Python 3. Não exige `npm install`, compilações de C++ ou daemons pesados em background.
 4. **Exportação Universal Multi-Harness:**
-   * O KAIROS exporta configurações nativas para Claude Code (`CLAUDE.md`), Cursor (`.cursorrules`) e Codex/Gemini/Windsurf (`AGENTS.md`) com um único comando (`kairos export all`).
+   * O KAIROS exporta configurações nativas para Claude Code (`CLAUDE.md`), Cursor (`.cursorrules`) e Agentes Universais/Windsurf/Gemini (`AGENTS.md`) com um único comando (`kairos export all`).
 5. **Telemetria de Tokens Contínua:**
    * A máquina de estados e o cabeçalho em tempo real garantem que o desenvolvedor e o agente saibam em qual etapa estão e quanto resta do orçamento.
 

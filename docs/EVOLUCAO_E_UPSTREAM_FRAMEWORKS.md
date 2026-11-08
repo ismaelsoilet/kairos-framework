@@ -10,7 +10,7 @@
 No ecossistema de agentes autônomos de codificação, a maioria dos frameworks sofre de uma de duas falhas capitais de longevidade:
 
 1. **A Síndrome do Fóssil Congelado:**  
-   O framework adota um snapshot de boas ideias em seu nascimento (ex: prompts estáticos de TDD ou templates rígidos de especificação), mas não possui canal para absorver novos comportamentos evasivos de novos modelos de linguagem (ex: Gemini 2.5, Claude 3.7, GPT-5). Em 6 meses, torna-se obsoleto.
+   O framework adota um snapshot de boas ideias em seu nascimento (ex: prompts estáticos de TDD ou templates rígidos de especificação), mas não possui canal para absorver novos comportamentos evasivos de novos modelos de fronteira e raciocínio (ex: Claude 3.7 Sonnet, Gemini 2.5 Pro, OpenAI o3, DeepSeek-R1). Em 6 meses, torna-se obsoleto.
 2. **A Síndrome do Monstro de Frankenstein:**  
    O framework adiciona indiscriminadamente cada nova técnica "da moda" que surge no Twitter/arXiv (ReAct aninhado, Tree-of-Thoughts, Reflexion infinito, dezenas de subagentes redundantes). O resultado é uma explosão catastrófica no consumo de tokens (150.000 tokens para uma alteração de CSS de 2 linhas) e diretivas contraditórias no contexto do agente.
 

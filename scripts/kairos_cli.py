@@ -408,6 +408,10 @@ FRAUD_PATTERNS = {
     "tautological_assertion": (
         r"^\s*(assert\s+(True|1\s*==\s*1|True\s*==\s*True|['\"][a-zA-Z0-9]+['\"]\s*==\s*['\"][a-zA-Z0-9]+['\"])|expect\((true|1)\)\.to(Be|Equal)\((true|1)\))",
         "Tautological or meaningless assertion (assert True / assert 1 == 1)"
+    ),
+    "obsolete_ai_model_reference": (
+        r"(?i)\b(openai\s+codex|gemini\s*3\.\d+|claude\s*3\.7\/opus|gpt-3\.5|text-davinci-\d+)\b",
+        "Deprecated, obsolete or hallucinated AI model reference detected"
     )
 }
 
@@ -415,6 +419,8 @@ CODE_EXTENSIONS = (
     ".py", ".ts", ".js", ".jsx", ".tsx", ".java", ".go", ".rs", ".rb", ".php",
     ".cs", ".c", ".cpp", ".swift", ".kt", ".dart", ".sh", ".sql"
 )
+DOC_EXTENSIONS = (".md", ".txt", ".json", ".yaml", ".yml")
+ALL_AUDIT_EXTENSIONS = CODE_EXTENSIONS + DOC_EXTENSIONS
 
 def scan_diff_text(diff_text):
     """Robust algorithmic scanner for the 6 classic frauds across single and multi-line diff blocks."""
@@ -441,8 +447,9 @@ def scan_diff_text(diff_text):
             current_file = old_file
             continue
 
-        # Skip non-code files
-        if not any(current_file.lower().endswith(ext) for ext in CODE_EXTENSIONS):
+        is_code = any(current_file.lower().endswith(ext) for ext in CODE_EXTENSIONS)
+        is_doc = any(current_file.lower().endswith(ext) for ext in DOC_EXTENSIONS)
+        if not (is_code or is_doc):
             continue
 
         if current_file not in file_added_lines:
@@ -456,10 +463,10 @@ def scan_diff_text(diff_text):
             code_line = line[1:].rstrip()
             file_added_lines[current_file].append(code_line)
             # Count added assertions
-            if re.search(r"^\s*(await\s+)?(assert\b|expect\(|self\.assert\w+|mock\.\w*assert)", code_line):
+            if is_code and re.search(r"^\s*(await\s+)?(assert\b|expect\(|self\.assert\w+|mock\.\w*assert)", code_line):
                 file_added_asserts[current_file] += 1
             # Count added test functions
-            if re.search(r"^\s*(def\s+test_\w+|it\s*\(|test\s*\()", code_line):
+            if is_code and re.search(r"^\s*(def\s+test_\w+|it\s*\(|test\s*\()", code_line):
                 file_added_tests[current_file] += 1
 
             # Single-line checks
@@ -469,6 +476,8 @@ def scan_diff_text(diff_text):
                 continue
             is_comment = stripped_code.startswith("#") or stripped_code.startswith("//") or stripped_code.startswith('"""') or stripped_code.startswith("'''") or stripped_code.startswith("*")
             for key, (pattern, desc) in FRAUD_PATTERNS.items():
+                if not is_code and key != "obsolete_ai_model_reference":
+                    continue
                 if is_comment and key in ("silent_failure_empty_catch", "phantom_stub", "tautological_assertion"):
                     continue
                 if is_comment and key == "weakened_test_skip" and not re.search(r"(#|//)\s*(assert\b|expect\()", stripped_code):
@@ -484,10 +493,10 @@ def scan_diff_text(diff_text):
         elif line.startswith("-") and not line.startswith("---"):
             code_line = line[1:].rstrip()
             # Count deleted assertions
-            if re.search(r"^\s*(await\s+)?(assert\b|expect\(|self\.assert\w+|mock\.\w*assert)", code_line):
+            if is_code and re.search(r"^\s*(await\s+)?(assert\b|expect\(|self\.assert\w+|mock\.\w*assert)", code_line):
                 file_deleted_asserts[current_file] += 1
             # Count deleted test functions
-            if re.search(r"^\s*(def\s+test_\w+|it\s*\(|test\s*\()", code_line):
+            if is_code and re.search(r"^\s*(def\s+test_\w+|it\s*\(|test\s*\()", code_line):
                 file_deleted_tests[current_file] += 1
 
     # Check for net assert deletions per file (prevents false positives on assert refactoring)
@@ -719,7 +728,7 @@ Always uphold the KAIROS Elastic Engine:
 """, encoding="utf-8")
         print("   ✅ Generated .cursorrules and .cursor/rules/")
 
-    if target in ["codex", "gemini", "universal", "all"]:
+    if target in ["codex", "gemini", "universal", "windsurf", "openai", "agents", "all"]:
         agents_md = root / "AGENTS.md"
         agents_md.write_text("""# KAIROS Protocol for Autonomous Agents (Universal)
 - Governed by KAIROS Adaptive SDLC.
@@ -893,9 +902,9 @@ HIGH_RISK_CUTOFF_PACKAGES = {
     "tailwind": "Tailwind v4 CSS-first config vs v3 tailwind.config.js",
     "tailwindcss": "Tailwind v4 CSS-first config vs v3 tailwind.config.js",
     "langchain": "Massive package split into langchain-core, langchain-community, 0.3+ imports",
-    "openai": "SDK v1.0+ rewrite (client.chat.completions.create)",
-    "google-genai": "Modern Google GenAI SDK (google.genai.Client) vs legacy google.generativeai",
-    "@google/genai": "Modern Google GenAI SDK vs legacy @google/generative-ai",
+    "openai": "SDK v1.0+ rewrite (client.chat.completions.create with modern frontier models e.g. o3, o1, gpt-4o; legacy models removed)",
+    "google-genai": "Modern Google GenAI SDK (google.genai.Client with models e.g. gemini-2.5-pro, gemini-2.5-flash) vs legacy google.generativeai",
+    "@google/genai": "Modern Google GenAI SDK (@google/genai with models e.g. gemini-2.5-pro, gemini-2.5-flash) vs legacy @google/generative-ai",
     "flutter": "Material 3 defaults, Dart 3 pattern matching, accentColor removed",
     "fastapi": "Pydantic v2 integration, Lifespan handlers replacing on_event",
     "nestjs": "NestJS v10+ modern rxjs, express v5 compatibility",
@@ -1324,7 +1333,7 @@ def main():
 
     # Export
     p_exp = subparsers.add_parser("export", help="Export KAIROS configuration to other harnesses")
-    p_exp.add_argument("target", choices=["claude", "cursor", "codex", "gemini", "universal", "all"], help="Target harness")
+    p_exp.add_argument("target", choices=["claude", "cursor", "codex", "gemini", "windsurf", "openai", "agents", "universal", "all"], help="Target harness")
 
     # Status & Telemetry
     p_stat = subparsers.add_parser("status", help="Show current stage and token telemetry")
