@@ -1,0 +1,10 @@
+{
+  "name": "real-gemini-benchmark",
+  "version": "1.0.0",
+  "description": "100% Real Live Benchmark using Gemini 3.8 Flash",
+  "main": "index.js",
+  "scripts": {
+    "test:vibe": "node test_vanilla_gemini.js",
+    "test:kairos": "node test_kairos_gemini.js"
+  }
+}

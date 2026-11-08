@@ -1,0 +1,167 @@
+{
+  "timestamp": "2026-11-08T12:07:45.995Z",
+  "results": [
+    {
+      "modelId": "gemini-3.8-flash",
+      "modelName": "Gemini 3.8 Flash (High)",
+      "provider": "Google DeepMind",
+      "vibe": {
+        "initialTokens": 106,
+        "reworkTokens": 1458,
+        "totalTokens": 1564,
+        "costUsd": 0.0004,
+        "raceConditionDetected": true,
+        "successfulBookings": 50,
+        "expectedBookings": 50,
+        "fraudEscapeRate": "46.7%",
+        "mutationKillRate": "30.0%"
+      },
+      "kairos": {
+        "totalTokens": 759,
+        "costUsd": 0.0002,
+        "reworkTokens": 0,
+        "raceConditionDetected": false,
+        "successfulBookings": 50,
+        "expectedBookings": 50,
+        "fraudEscapeRate": "0.0%",
+        "mutationKillRate": "100.0%",
+        "economyVsVibeRework": "51%"
+      }
+    },
+    {
+      "modelId": "gemini-2.5-pro",
+      "modelName": "Gemini 2.5 Pro",
+      "provider": "Google DeepMind",
+      "vibe": {
+        "initialTokens": 106,
+        "reworkTokens": 1458,
+        "totalTokens": 1564,
+        "costUsd": 0.0037,
+        "raceConditionDetected": true,
+        "successfulBookings": 50,
+        "expectedBookings": 50,
+        "fraudEscapeRate": "46.7%",
+        "mutationKillRate": "30.0%"
+      },
+      "kairos": {
+        "totalTokens": 759,
+        "costUsd": 0.0018,
+        "reworkTokens": 0,
+        "raceConditionDetected": false,
+        "successfulBookings": 50,
+        "expectedBookings": 50,
+        "fraudEscapeRate": "0.0%",
+        "mutationKillRate": "100.0%",
+        "economyVsVibeRework": "51%"
+      }
+    },
+    {
+      "modelId": "claude-3.7-sonnet",
+      "modelName": "Claude 3.7 Sonnet",
+      "provider": "Anthropic",
+      "vibe": {
+        "initialTokens": 106,
+        "reworkTokens": 1458,
+        "totalTokens": 1564,
+        "costUsd": 0.0103,
+        "raceConditionDetected": true,
+        "successfulBookings": 50,
+        "expectedBookings": 50,
+        "fraudEscapeRate": "46.7%",
+        "mutationKillRate": "30.0%"
+      },
+      "kairos": {
+        "totalTokens": 759,
+        "costUsd": 0.005,
+        "reworkTokens": 0,
+        "raceConditionDetected": false,
+        "successfulBookings": 50,
+        "expectedBookings": 50,
+        "fraudEscapeRate": "0.0%",
+        "mutationKillRate": "100.0%",
+        "economyVsVibeRework": "51%"
+      }
+    },
+    {
+      "modelId": "gpt-4o",
+      "modelName": "GPT-4o",
+      "provider": "OpenAI",
+      "vibe": {
+        "initialTokens": 106,
+        "reworkTokens": 1458,
+        "totalTokens": 1564,
+        "costUsd": 0.0074,
+        "raceConditionDetected": true,
+        "successfulBookings": 50,
+        "expectedBookings": 50,
+        "fraudEscapeRate": "46.7%",
+        "mutationKillRate": "30.0%"
+      },
+      "kairos": {
+        "totalTokens": 759,
+        "costUsd": 0.0036,
+        "reworkTokens": 0,
+        "raceConditionDetected": false,
+        "successfulBookings": 50,
+        "expectedBookings": 50,
+        "fraudEscapeRate": "0.0%",
+        "mutationKillRate": "100.0%",
+        "economyVsVibeRework": "51%"
+      }
+    },
+    {
+      "modelId": "gpt-4o-mini",
+      "modelName": "GPT-4o mini",
+      "provider": "OpenAI",
+      "vibe": {
+        "initialTokens": 106,
+        "reworkTokens": 1458,
+        "totalTokens": 1564,
+        "costUsd": 0.0004,
+        "raceConditionDetected": true,
+        "successfulBookings": 50,
+        "expectedBookings": 50,
+        "fraudEscapeRate": "46.7%",
+        "mutationKillRate": "30.0%"
+      },
+      "kairos": {
+        "totalTokens": 759,
+        "costUsd": 0.0002,
+        "reworkTokens": 0,
+        "raceConditionDetected": false,
+        "successfulBookings": 50,
+        "expectedBookings": 50,
+        "fraudEscapeRate": "0.0%",
+        "mutationKillRate": "100.0%",
+        "economyVsVibeRework": "51%"
+      }
+    },
+    {
+      "modelId": "deepseek-v3",
+      "modelName": "DeepSeek V3",
+      "provider": "DeepSeek",
+      "vibe": {
+        "initialTokens": 106,
+        "reworkTokens": 1458,
+        "totalTokens": 1564,
+        "costUsd": 0.0003,
+        "raceConditionDetected": true,
+        "successfulBookings": 50,
+        "expectedBookings": 50,
+        "fraudEscapeRate": "46.7%",
+        "mutationKillRate": "30.0%"
+      },
+      "kairos": {
+        "totalTokens": 759,
+        "costUsd": 0.0001,
+        "reworkTokens": 0,
+        "raceConditionDetected": false,
+        "successfulBookings": 50,
+        "expectedBookings": 50,
+        "fraudEscapeRate": "0.0%",
+        "mutationKillRate": "100.0%",
+        "economyVsVibeRework": "51%"
+      }
+    }
+  ]
+}

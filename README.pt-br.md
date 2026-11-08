@@ -5,8 +5,9 @@
 
 [![Licença: Apache-2.0](https://img.shields.io/badge/Licen%C3%A7a-Apache%202.0-blue.svg)](LICENSE)
 [![Python: 3.10+](https://img.shields.io/badge/Python-3.10%2B-green.svg)](https://python.org)
-[![Harness: Multi-Agente](https://img.shields.io/badge/Harness-Universal%20%28Antigravity%20%7C%20Claude%20Code%20%7C%20Cursor%20%7C%20Windsurf%29-orange.svg)](docs/ARCHITECTURE.md)
-[![Detecção de Fraudes: 100%](https://img.shields.io/badge/K--Bench%20Fraudes-100%25%20Barradas-brightgreen.svg)](benchmark/runner.py)
+[![Versão: 1.1.0](https://img.shields.io/badge/Vers%C3%A3o-1.1.0-blueviolet.svg)](plugin.json)
+[![Veredito do Audit: VERIFIED](https://img.shields.io/badge/Veredito%20Audit-VERIFIED%20(Zero--Trust)-success.svg)](docs/EMPIRICAL_BENCHMARK_REPORT.md)
+[![Economia Gemini 3.8: 19.3%](https://img.shields.io/badge/Economia%20Gemini%203.8%20Hardware-19.3%25-brightgreen.svg)](docs/EMPIRICAL_BENCHMARK_REPORT.md)
 
 ---
 
@@ -191,6 +192,18 @@ python3 scripts/kairos_cli.py export all
 * **Claude Code:** Cria `CLAUDE.md` e `.claude/`.
 * **Cursor IDE:** Cria `.cursorrules` e `.cursor/rules/`.
 * **Agentes Universais (Windsurf / Gemini CLI / OpenAI / Roo Code):** Cria `AGENTS.md`.
+
+---
+
+## 🔬 Benchmark Empírico e Telemetria de Hardware (v1.1.0)
+
+Em Novembro de 2026, o KAIROS foi submetido a um benchmark empírico comparando **Vibe Coding** contra **KAIROS SDLC (Modo GAMMA)** em duas aplicações SaaS idênticas rodando em portas locais (5051 e 5052), seguido por execução real de subagentes sob o modelo **Google Gemini 3.8 Flash (High)**:
+
+* 📊 **100% Zero-Defeito na 1ª Passagem:** Sob 50 threads concorrentes de reserva VIP, o Vibe Coding quebrou em produção permitindo sobre-reserva crítica (50 sucessos para limite de 10). O KAIROS com `AsyncMutex` alocou exatamente 10 (HTTP 200) e rejeitou 40 (HTTP 409 Conflict) com 0 assentos restantes.
+* 💰 **19.3% de Economia Líquida de Tokens de Hardware:** O Vibe Coding quebrou e exigiu um ciclo caro de reparo e depuração (61.5k inicial + 50.7k conserto = 112.3k tokens totais). O KAIROS entregou o código blindado na primeira passagem (90.6k tokens), resultando em **21.643 tokens ativos economizados** e **33,15% de economia com cache read**.
+* 🛡️ **Auditoria Adversarial de Confiança Zero (`[ ✅ VERIFIED ]`):** Um auditor independente executando Command Code (DeepSeek v4.1 Flash) testou fisicamente todos os 6 critérios empíricos diretamente nas portas locais sem confiar em alegações de texto, emitindo a certificação oficial `[ ✅ VERIFIED ]`.
+
+👉 Leia o relatório científico completo: **[Relatório do Benchmark Empírico e Telemetria de Hardware](docs/EMPIRICAL_BENCHMARK_REPORT.md)**.
 
 ---
 

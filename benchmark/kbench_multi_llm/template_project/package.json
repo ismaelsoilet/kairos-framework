@@ -1,0 +1,10 @@
+{
+  "name": "template-billing",
+  "version": "1.0.0",
+  "description": "Standardized SaaS Billing Core for K-Bench Multi-LLM Evaluation",
+  "main": "src/billing_core.js",
+  "scripts": {
+    "test": "node tests/test_billing.js"
+  },
+  "dependencies": {}
+}

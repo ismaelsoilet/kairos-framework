@@ -1,7 +1,7 @@
 {
   "name": "kairos",
   "displayName": "KAIROS SDLC",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Autonomous, Token-Efficient Agentic SDLC Framework. Combines cognitive specs (Elephant/Goldfish), Delta Specs (OpenSpec), surgical TDD (Superpowers), and zero-trust adversarial audits (Fable/SureForge) with dynamic token budgeting.",
   "author": {
     "name": "Ismael Soilet & DeepMind Pair",

@@ -3,8 +3,13 @@ __pycache__/
 *$py.class
 *.bak
 *.tmp
+node_modules/
+*/node_modules/
+*/*/node_modules/
 .kairos/worktrees/
 .kairos/*.patch
 .kairos/*.tmp
 .kairos/*.lock
 .kairos/.*.lock
+.kairos/*latest.json
+*.log

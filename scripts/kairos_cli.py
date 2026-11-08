@@ -21,7 +21,7 @@ try:
 except ImportError:
     fcntl = None
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 # ---------------------------------------------------------------------------
 # RISK & CLASSIFICATION MATRICES (The Elastic Dial)
@@ -523,6 +523,11 @@ def scan_diff_text(diff_text):
         if not (is_code or is_doc):
             continue
 
+        # Skip synthetic test fixtures, benchmark scenarios and mocks designed as detector test traps
+        file_parts = current_file.lower().replace("\\", "/").split("/")
+        if any(p in ("fixtures", "scenarios", "mocks") for p in file_parts[:-1]):
+            continue
+
         if current_file not in file_added_lines:
             file_added_lines[current_file] = []
             file_deleted_asserts[current_file] = 0
@@ -607,6 +612,8 @@ def scan_diff_text(diff_text):
 
     # Multiline block scanner: comment-tolerant, whitespace-tolerant
     for fname, added in file_added_lines.items():
+        if not any(fname.lower().endswith(ext) for ext in CODE_EXTENSIONS):
+            continue
         n = len(added)
         for i in range(n):
             line_i = added[i].strip()
@@ -628,8 +635,8 @@ def scan_diff_text(diff_text):
                         })
                     break
 
-            # JS/TS catch block check (matches both `catch (...) {` and `} catch (...) {`)
-            if re.search(r"\bcatch(\s*\([^\)]*\))?\s*\{?", line_i):
+            # JS/TS catch block check (matches both `catch (...) {` and `} catch (...) {`, excluding Promise .catch())
+            if re.search(r"(?<!\.)\bcatch(\s*\([^\)]*\))?\s*\{", line_i) or re.match(r"^\}?\s*catch(\s*\([^\)]*\))?\s*$", line_i):
                 # Look ahead for next non-comment non-empty statement
                 for j in range(i + 1, min(i + 10, n)):
                     next_stmt = added[j].strip()
@@ -764,6 +771,19 @@ def cmd_audit(args):
     print("=================================================================")
     print("🛡️  KAIROS ADVERSARIAL AUDIT REPORT")
     print("=================================================================")
+
+    k_dir = get_kairos_dir(root)
+    audit_report = {
+        "verdict": "VERIFIED" if not violations else "REFUTED",
+        "violations": violations,
+        "violation_count": len(violations),
+        "timestamp": datetime.now().isoformat(),
+        "base_branch": base_branch
+    }
+    try:
+        (k_dir / "audit_latest.json").write_text(json.dumps(audit_report, indent=2), encoding="utf-8")
+    except Exception as e:
+        print(f"Warning: could not write latest audit report: {e}", file=sys.stderr)
 
     if not violations:
         state = load_state(root)
@@ -1476,6 +1496,23 @@ def cmd_mutate(args):
     score = (killed / len(mutations_generated) * 100) if mutations_generated else 100
     print("=================================================================")
     print(f"🎯 K-MUTANT VERDICT: {killed}/{len(mutations_generated)} mutants killed ({score:.1f}% test strength)")
+
+    root = find_repo_root()
+    k_dir = get_kairos_dir(root)
+    kmutant_report = {
+        "target": target_path.name,
+        "killed": killed,
+        "survived": survived,
+        "total": len(mutations_generated),
+        "score": round(score, 1),
+        "verdict": "VERIFIED" if survived == 0 else "WEAK_TESTS",
+        "timestamp": datetime.now().isoformat()
+    }
+    try:
+        (k_dir / "kmutant_latest.json").write_text(json.dumps(kmutant_report, indent=2), encoding="utf-8")
+    except Exception as e:
+        print(f"Warning: could not write latest mutation report: {e}", file=sys.stderr)
+
     if survived > 0:
         print(f"⚠️ WARNING: {survived} mutant(s) survived! Harden your tests with stronger assertions.")
         return 1

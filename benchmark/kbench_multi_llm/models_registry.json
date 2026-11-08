@@ -1,0 +1,64 @@
+{
+  "models": [
+    {
+      "id": "gemini-3.8-flash",
+      "name": "Gemini 3.8 Flash (High)",
+      "provider": "Google DeepMind",
+      "input_cost_per_m": 0.15,
+      "output_cost_per_m": 0.60,
+      "cache_read_per_m": 0.0375,
+      "tokenizer": "cl100k_bpe_equivalent",
+      "reasoning_support": true
+    },
+    {
+      "id": "gemini-2.5-pro",
+      "name": "Gemini 2.5 Pro",
+      "provider": "Google DeepMind",
+      "input_cost_per_m": 1.25,
+      "output_cost_per_m": 5.00,
+      "cache_read_per_m": 0.3125,
+      "tokenizer": "cl100k_bpe_equivalent",
+      "reasoning_support": true
+    },
+    {
+      "id": "claude-3.7-sonnet",
+      "name": "Claude 3.7 Sonnet",
+      "provider": "Anthropic",
+      "input_cost_per_m": 3.00,
+      "output_cost_per_m": 15.00,
+      "cache_read_per_m": 0.30,
+      "tokenizer": "cl100k_bpe_equivalent",
+      "reasoning_support": true
+    },
+    {
+      "id": "gpt-4o",
+      "name": "GPT-4o",
+      "provider": "OpenAI",
+      "input_cost_per_m": 2.50,
+      "output_cost_per_m": 10.00,
+      "cache_read_per_m": 1.25,
+      "tokenizer": "o200k_base",
+      "reasoning_support": false
+    },
+    {
+      "id": "gpt-4o-mini",
+      "name": "GPT-4o mini",
+      "provider": "OpenAI",
+      "input_cost_per_m": 0.15,
+      "output_cost_per_m": 0.60,
+      "cache_read_per_m": 0.075,
+      "tokenizer": "o200k_base",
+      "reasoning_support": false
+    },
+    {
+      "id": "deepseek-v3",
+      "name": "DeepSeek V3",
+      "provider": "DeepSeek",
+      "input_cost_per_m": 0.14,
+      "output_cost_per_m": 0.28,
+      "cache_read_per_m": 0.014,
+      "tokenizer": "cl100k_bpe_equivalent",
+      "reasoning_support": true
+    }
+  ]
+}
