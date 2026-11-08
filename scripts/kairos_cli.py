@@ -449,7 +449,7 @@ def cmd_worktree(args):
 
 FRAUD_PATTERNS = {
     "weakened_test_skip": (
-        r"(\btest\.skip\b|\bxit\s*\(|\bfit\s*\(|\bfdescribe\s*\(|\.only\(|\btest\.only\b|\bit\.only\b|\bdescribe\.only\b|@pytest\.mark\.skip|@pytest\.mark\.xfail|\bpytest\.xfail\b|\.skip\(|\bdescribe\.skip\b|(#|//)\s*(assert\b|expect\()|__import__\(['\"]pytest['\"]\)\.skip|\braise\s+(unittest\.)?SkipTest\b|\bunittest\.skip\b|\bpytest\.skip\b)",
+        r"((?<!\.)\b(xit|fit|fdescribe)\s*\(|\b(describe|it|test|context)\.(only|skip)\s*\(|@pytest\.mark\.(skip|xfail)|\bpytest\.(xfail|skip)\b|@unittest\.skip\b|\bunittest\.skip\b|\braise\s+(unittest\.)?SkipTest\b|(#|//)\s*(assert\b|expect\()|__import__\(['\"]pytest['\"]\)\.skip)",
         "Test skipped, disabled or commented out"
     ),
     "silent_failure_empty_catch": (
@@ -709,20 +709,21 @@ def cmd_audit(args):
         except (subprocess.SubprocessError, OSError):
             diff_res = None
 
-        # Include unstaged / staged working tree diff as well
+        # Include staged working tree diff (--cached)
         try:
-            local_diff = subprocess.run(["git", "diff", "HEAD"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=target_path)
-            if local_diff.stdout.strip():
-                diff_text += "\n" + local_diff.stdout
+            staged_diff = subprocess.run(["git", "diff", "--cached"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=target_path)
+            if staged_diff.returncode == 0 and staged_diff.stdout.strip():
+                diff_text += "\n" + staged_diff.stdout
         except (subprocess.SubprocessError, OSError):
-            local_diff = None
+            staged_diff = None
         
+        # Include unstaged working tree diff
         try:
-            unstaged = subprocess.run(["git", "diff"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=target_path)
-            if unstaged.stdout.strip():
-                diff_text += "\n" + unstaged.stdout
+            unstaged_diff = subprocess.run(["git", "diff"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=target_path)
+            if unstaged_diff.returncode == 0 and unstaged_diff.stdout.strip():
+                diff_text += "\n" + unstaged_diff.stdout
         except (subprocess.SubprocessError, OSError):
-            unstaged = None
+            unstaged_diff = None
 
         # Include untracked files as synthetic additions
         try:

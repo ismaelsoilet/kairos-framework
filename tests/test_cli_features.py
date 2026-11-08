@@ -21,8 +21,10 @@ class TestKairosFeatures(unittest.TestCase):
     def setUp(self):
         self.original_cwd = os.getcwd()
         os.chdir(REPO_ROOT)
+        self.orig_state = load_state(REPO_ROOT)
 
     def tearDown(self):
+        save_state(self.orig_state, REPO_ROOT)
         os.chdir(self.original_cwd)
 
     def test_visual_dashboard_flag_exists(self):
@@ -130,10 +132,15 @@ class TestKairosFeatures(unittest.TestCase):
     def test_atomic_state_save(self):
         """RED TEAM RISK-02: State save must not leave a corrupted file on interrupted write."""
         state = load_state(REPO_ROOT)
-        state["_test_atomic_key"] = "atomic_value_123"
-        save_state(state, REPO_ROOT)
-        reloaded = load_state(REPO_ROOT)
-        self.assertEqual(reloaded.get("_test_atomic_key"), "atomic_value_123")
+        try:
+            state["_test_atomic_key"] = "atomic_value_123"
+            save_state(state, REPO_ROOT)
+            reloaded = load_state(REPO_ROOT)
+            self.assertEqual(reloaded.get("_test_atomic_key"), "atomic_value_123")
+        finally:
+            if "_test_atomic_key" in state:
+                del state["_test_atomic_key"]
+                save_state(state, REPO_ROOT)
 
     # -----------------------------------------------------------------------
     # ROUND 2 ADVERSARIAL STRESS TESTS
@@ -352,6 +359,51 @@ deleted file mode 100644
 """
         violations = scan_diff_text(diff)
         self.assertEqual(violations, [], f"Expected 0 violations for Joi.only, got {violations}")
+
+    def test_diff_scanner_allows_model_fit_in_test_files(self):
+        """SUREFORGE REPAIR-01.1: model.fit(...) inside test files must NOT trigger weakened_test_skip."""
+        diff = """diff --git a/tests/test_train.py b/tests/test_train.py
+--- a/tests/test_train.py
++++ b/tests/test_train.py
+@@ -10,3 +10,6 @@
++def test_model_training():
++    model = LogisticRegression()
++    model.fit(X_train, y_train)
++    assert model is not None
+"""
+        violations = scan_diff_text(diff)
+        weakened = [v for v in violations if v["fraud_type"] == "weakened_test_skip"]
+        self.assertEqual(weakened, [], f"model.fit in test file incorrectly flagged: {weakened}")
+
+    def test_diff_scanner_allows_query_skip_in_test_files(self):
+        """SUREFORGE REPAIR-01.2: query.skip(...) inside test files must NOT trigger weakened_test_skip."""
+        diff = """diff --git a/tests/test_pagination.test.ts b/tests/test_pagination.test.ts
+--- a/tests/test_pagination.test.ts
++++ b/tests/test_pagination.test.ts
+@@ -10,3 +10,6 @@
++test("pagination query", async () => {
++    const results = await query.skip(10).take(5).getMany();
++    expect(results).toBeDefined();
++});
+"""
+        violations = scan_diff_text(diff)
+        weakened = [v for v in violations if v["fraud_type"] == "weakened_test_skip"]
+        self.assertEqual(weakened, [], f"query.skip in test file incorrectly flagged: {weakened}")
+
+    def test_diff_scanner_allows_joi_only_in_test_files(self):
+        """SUREFORGE REPAIR-01.3: Joi.string().only(...) inside test files must NOT trigger weakened_test_skip."""
+        diff = """diff --git a/tests/test_schema.test.ts b/tests/test_schema.test.ts
+--- a/tests/test_schema.test.ts
++++ b/tests/test_schema.test.ts
+@@ -10,3 +10,6 @@
++it("validates enum", () => {
++    const schema = Joi.string().only("ADMIN", "USER");
++    expect(schema).toBeDefined();
++});
+"""
+        violations = scan_diff_text(diff)
+        weakened = [v for v in violations if v["fraud_type"] == "weakened_test_skip"]
+        self.assertEqual(weakened, [], f"Joi.only in test file incorrectly flagged: {weakened}")
 
     def test_diff_scanner_blocks_magic_comment_bypass(self):
         """ROUND 3 FIX-04: Magic comments like # FRAUD_PATTERNS must NOT exempt lines from audit."""
