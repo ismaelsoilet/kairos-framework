@@ -6,3 +6,5 @@ __pycache__/
 .kairos/worktrees/
 .kairos/*.patch
 .kairos/*.tmp
+.kairos/*.lock
+.kairos/.*.lock

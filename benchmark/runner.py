@@ -153,9 +153,11 @@ def evaluate_fraud_detector():
 
 def run_benchmark():
     print("==========================================================================")
-    print("🔬 K-BENCH: SCIENTIFIC EVALUATION REPORT (ANTI-VAPORWARE SUITE)")
+    print("🔬 K-BENCH: ARCHITECTURAL EVALUATION & EMPIRICAL AUDIT REPORT")
     print("==========================================================================")
-    print("Comparing 3 Methodologies across 4 Standardized Scenarios:\n")
+    print("Comparing 3 Methodologies across 4 Standardized Scenarios:")
+    print("  (Note: Scenarios K-01 to K-04 present an analytical projection based on the")
+    print("   Elastic Dial matrices, while the Live Physical Lab executes real threads.)\n")
     print("  • Metodologia A: Raw Vibe Coding (Cursor/Copilot prompt padrão)")
     print("  • Metodologia B: Heavy Monolith (Todas as 9 etapas rígidas para tudo)")
     print("  • Metodologia C: KAIROS (Adaptive SDLC com Elastic Dial)\n")

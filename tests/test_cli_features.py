@@ -11,8 +11,8 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from kairos_cli import (
     cmd_status, cmd_rollback, cmd_mutate, cmd_token, cmd_spec,
-    cmd_update, cmd_registry, cmd_lesson, cmd_scout,
-    parse_project_dependencies, HIGH_RISK_CUTOFF_PACKAGES,
+    cmd_update, cmd_registry, cmd_lesson, cmd_scout, cmd_dial, cmd_audit,
+    parse_project_dependencies, HIGH_RISK_CUTOFF_PACKAGES, StateLock,
     scan_diff_text, save_state, load_state, get_kairos_dir, MUTATION_OPS
 )
 
@@ -314,6 +314,143 @@ deleted file mode 100644
         violations = scan_diff_text(diff)
         fraud_types = [v["fraud_type"] for v in violations]
         self.assertIn("obsolete_ai_model_reference", fraud_types)
+
+    def test_diff_scanner_allows_model_fit_in_production_code(self):
+        """ROUND 3 FIX-01: model.fit(...) in non-test files must NOT trigger weakened_test_skip."""
+        diff = """diff --git a/src/train.py b/src/train.py
+--- a/src/train.py
++++ b/src/train.py
+@@ -10,3 +10,4 @@
++    model = LogisticRegression()
++    model.fit(X_train, y_train)
+"""
+        violations = scan_diff_text(diff)
+        self.assertEqual(violations, [], f"Expected 0 violations for model.fit, got {violations}")
+
+    def test_diff_scanner_allows_query_skip_in_production_code(self):
+        """ROUND 3 FIX-02: query.skip(...) in non-test files must NOT trigger weakened_test_skip."""
+        diff = """diff --git a/src/user.service.ts b/src/user.service.ts
+--- a/src/user.service.ts
++++ b/src/user.service.ts
+@@ -10,3 +10,4 @@
++    const query = repo.createQueryBuilder("u").skip(offset).take(limit);
+"""
+        violations = scan_diff_text(diff)
+        self.assertEqual(violations, [], f"Expected 0 violations for query.skip, got {violations}")
+
+    def test_diff_scanner_allows_joi_only_in_production_code(self):
+        """ROUND 3 FIX-03: Joi.string().only(...) in non-test files must NOT trigger weakened_test_skip."""
+        diff = """diff --git a/src/validation.ts b/src/validation.ts
+--- a/src/validation.ts
++++ b/src/validation.ts
+@@ -5,3 +5,4 @@
++    const roleSchema = Joi.string().only("ADMIN", "USER");
+"""
+        violations = scan_diff_text(diff)
+        self.assertEqual(violations, [], f"Expected 0 violations for Joi.only, got {violations}")
+
+    def test_diff_scanner_blocks_magic_comment_bypass(self):
+        """ROUND 3 FIX-04: Magic comments like # FRAUD_PATTERNS must NOT exempt lines from audit."""
+        diff = """diff --git a/tests/test_secret.ts b/tests/test_secret.ts
+--- a/tests/test_secret.ts
++++ b/tests/test_secret.ts
+@@ -10,3 +10,4 @@
++    it.only('bypassed', () => {});  # FRAUD_PATTERNS
+"""
+        violations = scan_diff_text(diff)
+        fraud_types = [v["fraud_type"] for v in violations]
+        self.assertIn("weakened_test_skip", fraud_types)
+
+    def test_diff_scanner_catches_none_return_continue_silent_catches(self):
+        """ROUND 3 FIX-05: Empty catches using None, return, or continue must be blocked."""
+        diff_none = """diff --git a/src/worker.py b/src/worker.py
+--- a/src/worker.py
++++ b/src/worker.py
+@@ -10,3 +10,4 @@
++    except Exception:
++        None
+"""
+        violations = scan_diff_text(diff_none)
+        fraud_types = [v["fraud_type"] for v in violations]
+        self.assertIn("silent_failure_empty_catch", fraud_types)
+
+        diff_return = """diff --git a/src/worker.py b/src/worker.py
+--- a/src/worker.py
++++ b/src/worker.py
+@@ -10,3 +10,4 @@
++    except Exception:
++        return
+"""
+        violations = scan_diff_text(diff_return)
+        fraud_types = [v["fraud_type"] for v in violations]
+        self.assertIn("silent_failure_empty_catch", fraud_types)
+
+    def test_diff_scanner_catches_js_void0_empty_catches(self):
+        """ROUND 3 FIX-06: Catch blocks with void 0 or bare semicolons must be caught."""
+        diff_void = """diff --git a/src/service.ts b/src/service.ts
+--- a/src/service.ts
++++ b/src/service.ts
+@@ -10,3 +10,5 @@
++    } catch (err) {
++        void 0;
++    }
+"""
+        violations = scan_diff_text(diff_void)
+        fraud_types = [v["fraud_type"] for v in violations]
+        self.assertIn("silent_failure_empty_catch", fraud_types)
+
+    def test_diff_scanner_catches_expanded_tautologies(self):
+        """ROUND 3 FIX-07: assert 2 == 2, assert not False, expect(true).toBeTruthy() must be blocked."""
+        diff = """diff --git a/tests/test_tautology.py b/tests/test_tautology.py
+--- a/tests/test_tautology.py
++++ b/tests/test_tautology.py
+@@ -10,3 +10,5 @@
++    assert 2 == 2
++    assert not False
+"""
+        violations = scan_diff_text(diff)
+        fraud_types = [v["fraud_type"] for v in violations]
+        self.assertIn("tautological_assertion", fraud_types)
+
+    def test_diff_scanner_catches_unittest_skiptest(self):
+        """ROUND 3 FIX-08: raise unittest.SkipTest in test files must be caught."""
+        diff = """diff --git a/tests/test_auth.py b/tests/test_auth.py
+--- a/tests/test_auth.py
++++ b/tests/test_auth.py
+@@ -10,3 +10,4 @@
++    raise unittest.SkipTest("skip this test")
+"""
+        violations = scan_diff_text(diff)
+        fraud_types = [v["fraud_type"] for v in violations]
+        self.assertIn("weakened_test_skip", fraud_types)
+
+    def test_dial_security_and_financial_prioritization(self):
+        """ROUND 3 FIX-09: Financial and security tasks must prioritize MODE GAMMA over button/UI keywords."""
+        class MockArgsWire:
+            description = ["Create", "button", "to", "execute", "funds", "wire", "transfer"]
+            force_gamma = False
+            force_beta = False
+
+        cmd_dial(MockArgsWire())
+        state = load_state(REPO_ROOT)
+        self.assertEqual(state.get("mode"), "gamma")
+
+        class MockArgsSql:
+            description = ["Fix", "critical", "SQL", "injection", "vulnerability", "in", "search", "endpoint"]
+            force_gamma = False
+            force_beta = False
+
+        cmd_dial(MockArgsSql())
+        state = load_state(REPO_ROOT)
+        self.assertEqual(state.get("mode"), "gamma")
+
+    def test_state_file_locking_context_manager(self):
+        """ROUND 3 FIX-10: StateLock must acquire and release file lock without error."""
+        k_dir = get_kairos_dir(REPO_ROOT)
+        with StateLock(k_dir):
+            state = load_state(REPO_ROOT)
+            self.assertIsNotNone(state)
+            self.assertIn("mode", state)
 
 if __name__ == "__main__":
     unittest.main()

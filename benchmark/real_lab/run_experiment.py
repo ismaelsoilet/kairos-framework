@@ -104,7 +104,7 @@ diff --git a/src/account.py b/src/account.py
     # FASE 4: Medição FÍSICA de Tokens Reais
     # -----------------------------------------------------------------------
     print("\n--------------------------------------------------------------------------")
-    print("▶ FASE 4: Medição FÍSICA de Tokens (Sem Números Inventados)")
+    print("▶ FASE 4: Medição FÍSICA de Tokens (Contexto Cirúrgico vs Monolítico)")
     
     # 1 token ~= 4 chars em inglês/código ou ~0.75 palavras
     def count_real_tokens(text: str) -> int:
@@ -117,9 +117,19 @@ diff --git a/src/account.py b/src/account.py
     kairos_real_tokens = count_real_tokens(surgical_text)
 
     # O contexto de um Monólito Não-Elástico:
-    # Carrega arquivos de documentação gigante, 5 personas de prompt, histórico acumulado:
-    monolith_prompt = surgical_text * 15 # simulando o context-stuffing de carregar a codebase toda
-    monolith_real_tokens = count_real_tokens(monolith_prompt)
+    # Carrega documentações inteiras da arquitetura, regras de governança e personas completas
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    monolith_files = [
+        repo_root / "README.md",
+        repo_root / "rules" / "kairos-core.md",
+        repo_root / "docs" / "ARCHITECTURE.md",
+        repo_root / "docs" / "SPEC_TO_CODE_ENGINEERING.md",
+    ]
+    monolith_text = surgical_text
+    for mf in monolith_files:
+        if mf.exists():
+            monolith_text += "\n" + mf.read_text(encoding="utf-8")
+    monolith_real_tokens = count_real_tokens(monolith_text)
 
     print(f"  • Tamanho do payload cirúrgico KAIROS:   {len(surgical_text):,} bytes")
     print(f"  • Tokens REAIS consumidos pelo KAIROS:   ~{kairos_real_tokens:,} tokens")
@@ -130,7 +140,7 @@ diff --git a/src/account.py b/src/account.py
     print("  1. A race condition ocorreu de verdade no seu processador.")
     print("  2. O Lock resolveu a concorrência de verdade.")
     print("  3. O detector de fraudes bloqueou a asserção comentada de verdade.")
-    print("  4. A economia de tokens do KAIROS foi calculada em bytes reais de texto.")
+    print("  4. A economia de tokens do KAIROS foi calculada em bytes reais de arquivos existentes.")
     print("==========================================================================")
 
 if __name__ == "__main__":
