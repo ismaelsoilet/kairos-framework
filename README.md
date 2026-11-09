@@ -134,7 +134,9 @@ It **does not** catch, as of v1.2:
 - a validation function that unconditionally returns `True`
 - a removed guard clause
 
-An independent probe of eight fraud patterns detected three. The corpus under `tests/fixtures/fraud_corpus/` exists to make that number measurable and to raise it; the current measured recall and precision are in [`CLAIMS.md`](CLAIMS.md) — whatever the corpus run reports, not a target restated as a result.
+An independent probe of eight fraud patterns detected three against v1.1.0. The corpus under `tests/fixtures/fraud_corpus/` now holds 43 labelled diffs (24 fraud, 19 clean) and reports **recall 100%, precision 96%** — with one known false positive: mocking an external dependency is indistinguishable, to a regex, from mocking the unit under test.
+
+Read that number carefully. The corpus was iterated against the rules, so it is a regression suite, not held-out evidence. A fresh holdout written after the rules scored **6/8 (75%)**. Its two misses are recorded as known limitations rather than quietly fixed. Full history in [`CLAIMS.md`](CLAIMS.md#holdout-history).
 
 **The scanner no longer excludes its own source file from auditing.** Through v1.1.0 it did (`if current_file.endswith("kairos_cli.py"): continue`), which meant the tool could not audit the tool. That exclusion is gone.
 

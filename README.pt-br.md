@@ -134,7 +134,9 @@ Ele **não** pega, a partir da v1.2:
 - uma função de validação que retorna `True` incondicionalmente
 - uma guarda removida
 
-Uma sonda independente com oito padrões de fraude detectou três. O corpus em `tests/fixtures/fraud_corpus/` existe para tornar esse número mensurável e para subi-lo; o recall e a precision medidos atualmente estão em [`CLAIMS.md`](CLAIMS.md) — o que a execução do corpus reportar, não uma meta reescrita como resultado.
+Uma sonda independente com oito padrões de fraude detectou três contra a v1.1.0. O corpus em `tests/fixtures/fraud_corpus/` agora tem 43 diffs rotulados (24 fraude, 19 limpos) e reporta **recall 100%, precision 96%** — com um falso positivo conhecido: mockar dependência externa é indistinguível, para uma regex, de mockar a unidade sob teste.
+
+Leia esse número com cuidado. O corpus foi iterado contra as regras, então é uma suíte de regressão, não evidência em dados não vistos. Um holdout limpo, escrito depois das regras, deu **6/8 (75%)**. Os dois erros dele estão registrados como limitações conhecidas, não corrigidos em silêncio. Histórico completo em [`CLAIMS.md`](CLAIMS.md#holdout-history).
 
 **O scanner não exclui mais o próprio arquivo-fonte da auditoria.** Até a v1.1.0 ele excluía (`if current_file.endswith("kairos_cli.py"): continue`), o que significava que a ferramenta não conseguia auditar a ferramenta. Essa exclusão foi removida.
 

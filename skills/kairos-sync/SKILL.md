@@ -12,7 +12,6 @@ Sync completes the development lifecycle, ensuring that documentation remains sy
 ```text
 /kairos:ship
 /kairos:sync
-/kairos:drift
 ```
 
 ## Procedures
@@ -30,5 +29,11 @@ When the Judge issues a **READY** verdict:
    ```
 3. Merge branch or prepare clean Pull Request.
 
-### 2. Specification Drift Detection (`/kairos:drift`)
-Run periodically to detect divergence between living specs in `.kairos/specs/` and active source code. Ensures that future manual edits do not rot the architectural documentation.
+### 2. Specification drift — NOT IMPLEMENTED
+
+Earlier versions of this skill documented `/kairos:drift` as a command that
+compares living specs against active source code. **No such subcommand exists in
+`scripts/kairos_cli.py`.** It was documented but never built.
+
+Until it exists, drift between `.kairos/specs/` and the code is a manual review
+task, not an automated guarantee. Do not plan around it.

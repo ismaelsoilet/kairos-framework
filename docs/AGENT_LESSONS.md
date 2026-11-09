@@ -78,4 +78,4 @@ This document compiles the 10 most critical cognitive and operational lessons de
 
 ## Lesson 10: Living Specifications Beat Stale READMEs
 * **The Trap:** An architecture document is written in Month 1, but by Month 6 the code has diverged completely, rendering the documentation useless.
-* **The KAIROS Directive:** Specifications must be version-controlled deltas (`.kairos/changes/`) that merge into canonical living docs (`.kairos/specs/`) via `kairos archive`. Regularly run `kairos drift` to ensure documentation matches reality.
+* **The KAIROS Directive:** Specifications must be version-controlled deltas (`.kairos/changes/`) that merge into canonical living docs (`.kairos/specs/`) via `kairos archive`. Drift between specs and code is currently a **manual review task** — there is no `kairos drift` command.

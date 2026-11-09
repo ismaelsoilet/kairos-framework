@@ -1,78 +1,98 @@
-# 🔬 Relatório Empírico: KAIROS Framework vs. Vibe Coding
-## Benchmark Científico, Telemetria de Hardware (Gemini 3.8 Flash) e Auditoria Adversarial Independente
+# Relatório: uma execução comparativa (n = 1 por braço) — **não é um benchmark**
 
-> **Data de Homologação:** 08 de Novembro de 2026  
-> **Framework Auditado:** KAIROS SDLC Framework v1.1.0  
-> **Auditor Externo Independente:** Command Code / DeepSeek v4.1 Flash  
-> **Veredito Oficial:** `[ ✅ VERIFIED ]` (6/6 Alegações Reproduzidas Fisicamente)
-
----
-
-## Executive Summary
-
-O setor de desenvolvimento assistido por IA frequentemente debate a eficácia do chamado **Vibe Coding** (geração rápida e informal de código sem especificação) versus **Governança Agentica Formal** (SDLC com especificações prévias, TDD estrito, mutex assíncrono e auditoria adversarial de diffs).
-
-Para resolver esta disputa empiricamente, construímos dois projetos idênticos a partir de uma mesma especificação de SaaS ("NexusPulse AI"):
-1. **Vanilla Project (Porta 5051):** Desenvolvido via Vibe Coding tradicional.
-2. **KAIROS Project (Porta 5052):** Desenvolvido sob governança KAIROS Modo GAMMA.
-
-Adicionalmente, submetemos os dois paradigmas a **subagentes reais acionados nativamente pelo modelo Google Gemini 3.8 Flash (High)** para auditar os tokens físicos de hardware registrados nos logs internos (`transcript.jsonl`).
+> **Data:** 08 de novembro de 2026
+> **Versão avaliada:** KAIROS v1.1.0
+> **Veredito deste documento:** os números de tokens são reais; **a conclusão que
+> foi publicada a partir deles não se sustenta.**
+>
+> Este arquivo substitui a versão anterior, intitulada "Benchmark Científico,
+> Telemetria de Hardware e Auditoria Adversarial Independente". O título anterior
+> continha três afirmações falsas: não era científico (sem pré-registro, sem
+> repetição, sem braço de controle), não era benchmark (n = 1), e não era
+> independente (mesmo autor, mesma máquina, prompt do autor).
+>
+> Ver [`RETRACTION.md`](../RETRACTION.md). Estudo de caso completo em
+> [`case-studies/GEMINI_N1.md`](case-studies/GEMINI_N1.md).
 
 ---
 
-## 📊 Tabela de Evidências Físicas da Auditoria Independente
+## O que foi feito
 
-A auditoria foi conduzida por um agente autônomo externo sem histórico prévio, sob a diretiva de **Confiança Zero (Zero-Trust)**:
+Duas sessões de agente no mesmo modelo, no mesmo dia:
 
-| # | Requisito Empírico | Procedimento Executado | Resultado Observado | Status |
-| :---: | :--- | :--- | :--- | :---: |
-| **1** | **Saúde e Telemetria Dinâmica BPE** | Query em `/api/health` e `/api/metrics` com medição antes e depois de inserção de 5 palavras no código. | `liveCodebaseTokens` variou em tempo real de `8116 → 8124` (+8 tokens BPE) e retornou a `8116` após restauração. Timestamps batem com `stat` (`mtime`). | **CONFIRMADO** |
-| **2** | **Concorrência e Códigos HTTP 409** | 50 requisições simultâneas de reserva VIP para uma capacidade limite de 10 assentos. | Vanilla: 50 sucessos, 0 rejeições (saldo corrompido, sobre-reserva de 40 assentos).<br>KAIROS: Exatamente 10 sucessos (HTTP 200) e 40 rejeições (HTTP 409 Conflict), deixando 0 assentos restantes. | **CONFIRMADO** |
-| **3** | **Equivalência de Carga (Throughput / Latência)** | 3 baterias de 1000 requisições com concorrência de 25 threads em `/api/calculate-plan`. | Vanilla: 1645.0 RPS / 15.91 ms.<br>KAIROS: 1591.3 RPS / 15.04 ms.<br>Diferença média de 3,3% em RPS e 5,5% em latência (zero timeouts), provando que o `AsyncMutex` não gera gargalo. | **CONFIRMADO** |
-| **4** | **Auditoria de Diff (6 Fraudes Clássicas)** | Execução de `kairos audit --base main` nos repositórios. | Vanilla: `[ ❌ REFUTED ]` (Exit Code 1) com 5 achados (1 asserção comentada + 4 catches vazios).<br>KAIROS: `[ ✅ VERIFIED ]` (Exit Code 0) tanto no diff atual quanto no commit gênese (`24108fe`). | **CONFIRMADO** |
-| **5** | **Teste de Mutação K-Mutant** | Mutação sintética de operadores lógicos em `src/calculator.js` testada contra `npm test`. | Vanilla: 3/10 mutantes mortos (30,0% kill rate, 70% sobreviveram despercebidos).<br>KAIROS: 10/10 mutantes mortos (100,0% kill rate). | **CONFIRMADO** |
-| **6** | **Headers de Segurança Web** | Inspeção de cabeçalhos HTTP via `curl -sI`. | Vanilla: 0/4 headers.<br>KAIROS: 4/4 headers (CSP estrito, X-Content-Type-Options: nosniff, X-Frame-Options: DENY, Referrer-Policy). | **CONFIRMADO** |
+- **Braço A (livre):** recebeu *"implemente uma classe de carteira digital com
+  `withdraw` e `applyPromo`"*. O enunciado não menciona concorrência.
+- **Braço B (governado):** recebeu a mesma tarefa **mais** a instrução de
+  implementar `AsyncMutex` para serializar saques, prevenir race conditions, e
+  testar com 50 requisições concorrentes.
+
+## Por que isso não mede o framework
+
+Os dois braços não receberam a mesma tarefa. O braço governado recebeu a solução
+no enunciado. Portanto a diferença observada é compatível com uma explicação que
+não envolve KAIROS em absoluto: **um requisito bem escrito evita o defeito**.
+
+Some-se a isso:
+
+- **n = 1 por braço.** Sem repetição, sem intervalo de confiança.
+- **Sem braço de controle.** Não há como separar "aviso sobre o perigo" de
+  "processo de governança".
+- **O braço governado gastou 2,2× mais tokens de saída** (21.087 vs 9.422) e
+  precisou de **9 retentativas de permissão**. Esses fatos foram apresentados
+  antes como "retentativas operacionais" e não apareciam no destaque.
+
+## O que reproduz de fato
+
+Os números de tokens vêm de `usage` real da API, preservados nos transcripts, e a
+aritmética reproduz:
+
+| Métrica | Braço livre | Braço governado |
+| :--- | ---: | ---: |
+| Input | 102.897 | 69.589 |
+| Output | 9.422 | 21.087 |
+| **Ativos (in+out)** | **112.319** | **90.676** |
+| Cache read | 500.762 | 319.139 |
+
+Comando: `python3 benchmark/case_study_gemini_n1/run_real_gemini_benchmark.py`.
+
+O laboratório de concorrência também reproduz e é independente da justiça dos
+prompts:
+
+- implementação do braço livre: 60 saques concorrentes de R$ 10 sobre R$ 500 →
+  60 sucessos, saldo final **−R$ 100**;
+- a mesma implementação após o ciclo de reparo → 50 sucessos, 10 rejeições,
+  saldo 0;
+- implementação do braço governado → 50 sucessos, 10 rejeições, saldo 0, na
+  primeira passagem.
+
+Isso demonstra que **o mutex funciona**. Não demonstra que o framework faz um
+agente chegar ao mutex com mais frequência do que um requisito claro chegaria.
+
+## O que foi retirado deste documento
+
+| Alegação anterior | Motivo |
+| :--- | :--- |
+| "19,3% de economia líquida de tokens" | diferença real entre braços desiguais; não é efeito do framework |
+| "100% zero-defeito na primeira passagem" | consequência direta da assimetria de enunciado |
+| "33,15% de economia com cache read" | mesmo cálculo, denominador diferente, comparação não like-for-like |
+| "Auditoria Adversarial Independente / VERIFIED 6/6" | mesmo autor, mesma máquina, prompt do autor; o scanner usado tinha 5 lacunas conhecidas de detecção |
+| "peer-reviewed" | não houve revisão por pares |
+
+## O que faria disso um experimento
+
+Está escrito, antes da coleta de dados, em
+[`benchmark/PREREGISTRATION.md`](../benchmark/PREREGISTRATION.md): três braços
+(livre, aviso, governado) com o mesmo texto de tarefa, n = 5, ordem randomizada,
+IC95% por bootstrap, juiz cego para qualidade, e a regra de decisão fixada de
+antemão — se o intervalo incluir zero, a conclusão publicada é "não demonstrado".
+
+Nenhuma execução desse protocolo foi feita. Não há credenciais nem orçamento
+autorizado neste ambiente.
 
 ---
 
-## 🔬 A Contabilidade Real de Tokens: Google Gemini 3.8 Flash
+## Como ler este documento
 
-Para eliminar projeções teóricas, auditamos os arquivos JSONL da infraestrutura física do Google Gemini (`transcript.jsonl`), comparando o ciclo completo de entrega entre Vibe Coding e KAIROS:
-
-### 1. Gemini Vibe Coding (Subagente 1)
-- **Turno 1 (Geração Inicial):**
-  - Consumo: 61.557 tokens ativos (56.167 input + 5.390 output; 326.206 cache).
-  - Status em Produção: **❌ Falha Crítica de Concorrência**. O código ingênuo gerou saldo negativo (-R$ 100) sob 60 threads.
-- **Turno 2 (Ciclo Real de Reparo e Depuração):**
-  - Consumo: 50.762 tokens ativos (46.730 input + 4.032 output; 174.556 cache).
-  - Escopo do Reparo: Diagnóstico do race condition, implementação de fila de serialização e criação de suíte de testes de estresse.
-- **Custo Total do Vibe Coding:** **112.319 tokens ativos** (613.081 tokens processados com cache).
-
-### 2. Gemini KAIROS SDLC (Subagente 2 - Modo GAMMA)
-- **Turno Único (Delta Spec + TDD Estrito + AsyncMutex):**
-  - Consumo: 90.676 tokens ativos (69.589 input + 21.087 output; 319.139 cache).
-  - Inclui: 9 retentativas operacionais de tool calls e execução de 12 testes unitários/concorrência.
-  - Retrabalho de Código: **0 tokens**.
-  - Status em Produção: **✅ 100% Blindado de primeira** (Saldo R$ 0, 10 alocações, 40 rejeições com HTTP 409).
-- **Custo Total do KAIROS:** **90.676 tokens ativos** (409.815 tokens processados com cache).
-
-### 📈 Balanço Econômico Consolidado
-
-$$\text{Economia Ativa (Input + Output)} = 112.319 - 90.676 = \mathbf{21.643\ tokens\ (19,3\%)}$$
-$$\text{Economia Total (com Cache Read)} = 613.081 - 409.815 = \mathbf{203.266\ tokens\ (33,15\%)}$$
-
-```
-Tokens Ativos (In + Out):
-[Vibe Coding (Total)]  ████████████████████ 112,319 tok  (Quebrou + Reparo)
-[KAIROS Framework]     ████████████████     90,676 tok   (Blindado na 1ª passagem)
-                                            └─ Economia Líquida: 21,643 tok (19.3%)
-```
-
----
-
-## 🎯 A Lição Fundamental da Engenharia de Software com IA
-
-O experimento demonstra com rigor matemático por que o Vibe Coding é uma falsa economia:
-1. **O Custo Inicial Oculto:** O Vibe Coding parece ~29k tokens mais barato no primeiro prompt porque o desenvolvedor omite requisitos não funcionais essenciais (como concorrência e idempotência).
-2. **A Cobrança em Produção:** Quando o sistema falha, o modelo precisa reprocessar todo o contexto acumulado, inspecionar logs de erro e reescrever a arquitetura, consumindo mais tokens no conserto do que gastaria se tivesse especificado o sistema desde o início.
-3. **A Solução do KAIROS:** Ao forçar uma **Delta Spec** antes da implementação (Modo GAMMA), o KAIROS antecipa os invariantes de concorrência e entrega código correto na primeira passagem, economizando tokens e eliminando incidentes de produção.
+Se você quer saber **se o mutex funciona**: sim, e há código executável aqui.
+Se você quer saber **se o KAIROS economiza tokens**: não se sabe. O único número
+que existia foi produzido comparando duas tarefas diferentes, e foi retirado.

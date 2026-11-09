@@ -27,11 +27,32 @@
 | C-005 | `benchmark/case_study_gemini_n1/` | KAIROS arm active tokens | 90,676 (69,589 in + 21,087 out) | CASE_STUDY | same | same | 2026-11-08 | CASE_STUDY |
 | C-006 | `benchmark/case_study_gemini_n1/` | KAIROS arm output tokens vs vibe arm | 21,087 vs 9,422 (2.2×) | CASE_STUDY | same | same | 2026-11-08 | CASE_STUDY |
 | C-007 | `benchmark/case_study_gemini_n1/` | KAIROS arm permission retries | 9 | CASE_STUDY | same | same | 2026-11-08 | CASE_STUDY |
-| C-008 | `README.md` | Corpus recall and precision | **not yet measured** | — | `tests/fixtures/fraud_corpus/` + `benchmark/eval_corpus.py` | `python3 benchmark/eval_corpus.py` | pending | UNVERIFIED |
-| C-009 | `README.md` | Bundle-size / runtime of scanner | **not yet measured** | — | — | — | pending | UNVERIFIED |
-| C-010 | `README.md` | Benchmark hypotheses H1/H0 | **no data collected** | — | `benchmark/PREREGISTRATION.md` | — | pending | UNVERIFIED |
+| C-008 | `README.md` | Corpus recall | 100.0% (24/24 fraud cases) | MEASURED | `tests/fixtures/fraud_corpus/corpus.json` | `python3 benchmark/eval_corpus.py` | 2026-11-08 | MEASURED |
+| C-009 | `README.md` | Corpus precision | 96.0% (1 known false positive of 25 flagged) | MEASURED | same | same | 2026-11-08 | MEASURED |
+| C-010 | `README.md` | Fresh holdout generalisation | 6/8 (75%) before its two misses were folded into the corpus | MEASURED | transcript in this file, section "Holdout history" | manual probe | 2026-11-08 | MEASURED |
+| C-011 | `benchmark/PREREGISTRATION.md` | Benchmark hypotheses H1/H0/H2 | **no data collected** | — | `benchmark/PREREGISTRATION.md` | — | pending | UNVERIFIED |
+| C-012 | `README.md` | Scanner runtime on a 500-line diff | **not measured** | — | — | — | pending | UNVERIFIED |
 
-Claims C-008 through C-010 are intentionally listed as `UNVERIFIED` rather than omitted: they are the three things a reader is most likely to ask about, and the honest answer today is "not measured".
+Claims C-011 and C-012 are listed as `UNVERIFIED` rather than omitted: they are
+the two things a reader would most reasonably ask next, and the honest answer
+today is "not measured".
+
+### Holdout history
+
+Three probes were run against the scanner. They are recorded in order because the
+sequence matters more than any single number:
+
+| Probe | Cases | Result | What happened next |
+| :--- | :--- | :--- | :--- |
+| v1.1.0 baseline, 8 patterns | 8 | **3/8 caught** | Published in `RETRACTION.md`; drove the rebuild |
+| Corpus after rebuild | 43 | 24/24 fraud, 1 FP | Iterated against — contaminated as evidence |
+| Fresh holdout #1 | 10 | 8/10 | 2 misses folded into the corpus as F21/F22 |
+| Fresh holdout #2 | 9 | 7/9 | 2 misses folded in as F21-adjacent, F24 |
+| Fresh holdout #3 | 8 | **6/8 (75%)** | Misses recorded as *known limitations* (C18, C19), **not** fixed |
+
+The last row is the only unbiased estimate of generalisation in this repository,
+and it is 75%, not 100%. The corpus is a regression suite: it proves the rules
+have not broken, not that they generalise.
 
 ---
 
