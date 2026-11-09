@@ -219,6 +219,73 @@ not a research assistant, and it should not be sold as one.
 
 ---
 
+## 4d. fable-judge and SureForge: what was kept, what was not adopted
+
+Both are installed here and both are good. Neither was adopted as a framework,
+because the useful part of each is four or five checks and the rest is process
+vocabulary that this project already speaks.
+
+### fable-judge, item by item
+
+| Item it checks | Covered before | Now |
+| :--- | :--- | :--- |
+| Weakened checks | yes — `fraud:assert_deletion`, `fraud:weakened_test_skip` | same |
+| Scope creep | yes — `scope_drift`, `no_change_violation` | same |
+| Spec betrayal | yes — `spec_drift` | same |
+| **Re-run every claimed verification** | no | **`--verify "<cmd>"`** |
+| **Unauthorized action** | no | **`outward_command`** |
+| **Debris** | no | **`debris`** |
+| Verdict vocabulary | — | `READY`/`REPAIR`/`BLOCKED`, already in use here |
+
+`--verify` is the important one. It is the only claim a diff cannot settle: run
+the command, capture the real exit code, and block on failure. Without it the
+gate prints `verification: NOT RUN — so 'tests pass' is a claim`.
+
+`outward_command` flags `git push`, `npm publish`, `terraform apply`,
+`kubectl delete`, `DROP TABLE`, `rm -rf /` and similar added in the diff. It is
+`major`, not a blocker: adding a deploy script is often correct, but a reviewer
+has to see it.
+
+`debris` flags interactive debuggers as `major` (a `breakpoint()` in delivered
+code halts execution) and scratch files / debug prints as `minor`. `print()` and
+`console.error()` are deliberately **not** matched — they are legitimate output,
+and flagging them is how a checker gets switched off.
+
+### SureForge, item by item
+
+| Rule | Where it lives here |
+| :--- | :--- |
+| Know the contract | the spec, scored for completeness |
+| Advance on evidence | gate exit code |
+| READY / REPAIR / BLOCKED | the gate's verdict vocabulary (adopted from SureForge) |
+| Separate production from review | fresh-context review (EGM's Goldfish) |
+| Coverage, not sampling | per-criterion drift check |
+| Smallest sufficient tier | `kairos fit` |
+
+SureForge contributed **the vocabulary** and nothing mechanical that was missing.
+Its tiers, ledgers, three-round cap and resume protocol are process
+prescriptions for a human working with an agent; this project does not enforce
+them and does not claim to.
+
+### What was deliberately not adopted
+
+- **A second set of verdict names.** Two frameworks with `VERIFIED` and `READY`
+  for the same idea is exactly the noise this is trying to remove.
+- **Report formats.** fable-judge's claims table is good; the gate already
+  produces one row per finding with its evidence.
+- **The suite mode.** `/fable-judge suite` evaluates a skill or model against a
+  trap suite. Useful, unrelated to delivery verification, and it needs the
+  fable-method `eval/` directory.
+
+### Correction to an earlier claim
+
+An answer earlier in this project said fable-judge and SureForge were "already
+covered" by the gate. **Three of seven items were.** The other four were not, and
+saying so without checking was the same error this project keeps making. They are
+implemented now, and the mapping above is the receipt.
+
+---
+
 ## 5. The recommended stack, and why each piece is there
 
 The benchmark makes one recommendation possible without any further measurement,

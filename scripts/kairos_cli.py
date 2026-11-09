@@ -2135,10 +2135,23 @@ def cmd_gate(args):
         print("ℹ️ No diff against that base. Nothing to verify.")
         return 0
 
+    verification = None
+    verify_cmd = getattr(args, "verify", None)
+    if verify_cmd:
+        print(f"▶ Re-running the claimed verification: {verify_cmd}")
+        verification = kairos_gate.run_verification(str(verify_cmd), cwd=str(target))
+        status = verification["exit_code"]
+        print(f"  exit={status} in {verification['duration_s']}s")
+        if verification["tail"]:
+            for ln in verification["tail"][-5:]:
+                print(f"    {ln[:110]}")
+        print()
+
     result = kairos_gate.gate(
         kairos_gate.parse_spec(spec_path),
         diff_text,
         allow_fraud_rules=tuple(args.enable_rule or ()),
+        verification=verification,
     )
 
     state = load_state(target)
@@ -2167,6 +2180,12 @@ def cmd_gate(args):
     print(f"  acceptance:      {result['criteria']} criteria")
     print(f"  diff:            {len(result['diff']['files'])} file(s), "
           f"+{result['diff']['added']}/-{result['diff']['removed']} lines")
+    if result.get("verification"):
+        v = result["verification"]
+        print(f"  verification:    `{v['command']}` -> exit {v['exit_code']} "
+              f"({v['duration_s']}s)")
+    else:
+        print("  verification:    NOT RUN — no --verify given, so 'tests pass' is a claim")
     if result["findings"]:
         print("  findings:")
         for f in result["findings"]:
@@ -2309,6 +2328,9 @@ def main():
     p_gate.add_argument("--json", action="store_true", help="Machine-readable output")
     p_gate.add_argument("--enable-rule", action="append", default=[], metavar="NAME",
                         help="Enable a scanner rule that is off by default")
+    p_gate.add_argument("--verify", default=None, metavar="CMD",
+                        help="Command to re-run as evidence, e.g. 'pytest -q'. "
+                             "Without it, any claim that tests pass stays unverified.")
 
     # Brainstorm: alternatives before commitment
     p_bs = subparsers.add_parser(

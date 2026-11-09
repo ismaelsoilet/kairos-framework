@@ -386,6 +386,128 @@ CODE_EXT = (".py", ".ts", ".js", ".tsx", ".jsx", ".go", ".rs", ".rb", ".php",
             ".java", ".kt", ".swift", ".cs", ".c", ".cpp", ".dart")
 
 
+DEBRIS_RE = re.compile(
+    r"(?<![\w.])("
+    r"console\.log|console\.debug|debugger;?"
+    r"|pdb\.set_trace\(\)|breakpoint\(\)|import\s+pdb"
+    r"|binding\.pry|byebug"
+    r"|dd\(|var_dump\(|print_r\("
+    r"|fmt\.Println\(\"DEBUG"
+    r")"
+)
+SCRATCH_FILE_RE = re.compile(
+    r"(^|/)(debug_|scratch_|tmp_|temp_|playground_|test_manual)[^/]*\.\w+$"
+    r"|\.(bak|orig|rej|swp)$|~$"
+)
+# Commands that reach outside the repository. A diff that adds one is not
+# necessarily wrong, but it needs a human to say yes.
+OUTWARD_RE = re.compile(
+    r"\b("
+    r"git\s+push|git\s+reset\s+--hard|git\s+clean\s+-[a-z]*f"
+    r"|npm\s+publish|yarn\s+publish|pnpm\s+publish|cargo\s+publish|twine\s+upload"
+    r"|kubectl\s+(apply|delete)|terraform\s+(apply|destroy)|helm\s+(install|upgrade)"
+    r"|aws\s+\w+\s+(create|delete|put|terminate)"
+    r"|DROP\s+TABLE|TRUNCATE\s+TABLE|DELETE\s+FROM\s+\w+\s*(;|$)"
+    r"|rm\s+-rf\s+/|chmod\s+777"
+    r")"
+)
+
+
+def debris_findings(diff_text):
+    """Debug statements and scratch files added by the change.
+
+    Deliberately narrow. Only unambiguous debug calls are matched — `print()`
+    and `console.error()` are legitimate output in many codebases, so flagging
+    them would produce the kind of noise that gets a checker turned off.
+    """
+    findings = []
+    current = ""
+    for line in diff_text.splitlines():
+        if line.startswith("+++ b/"):
+            current = line[6:].strip()
+            continue
+        if not current or not line.startswith("+") or line.startswith("+++"):
+            continue
+        if any(s in current for s in SKIP_DIRS):
+            continue
+        body = line[1:]
+        if SCRATCH_FILE_RE.search(current) and not current.endswith((".md", ".txt")):
+            findings.append({
+                "rule": "debris",
+                "severity": "minor",
+                "detail": f"scratch or backup file added: {current}",
+                "evidence": "leftover files are the sixth fraud the judge catalogues",
+            })
+            current = ""  # report the file once, not once per line
+            continue
+        m = DEBRIS_RE.search(body)
+        if m:
+            # An interactive debugger left in delivered code halts execution when
+            # reached. That is a defect, not a style nit.
+            interactive = m.group(1).startswith(("breakpoint", "pdb", "binding.pry", "byebug"))
+            findings.append({
+                "rule": "debris",
+                "severity": "major" if interactive else "minor",
+                "detail": f"{current}: debug statement left in `{m.group(1)}`",
+                "evidence": "remove before reporting complete",
+            })
+    return findings
+
+
+def outward_findings(diff_text):
+    """Commands in the change that reach outside the repository.
+
+    The judge calls this 'unauthorized action'. A diff containing `git push` or
+    `terraform apply` is not proof of anything on its own, but the reviewer has
+    to see it and decide, which is exactly what a gate should force.
+    """
+    findings = []
+    current = ""
+    for line in diff_text.splitlines():
+        if line.startswith("+++ b/"):
+            current = line[6:].strip()
+            continue
+        if not current or not line.startswith("+") or line.startswith("+++"):
+            continue
+        body = line[1:]
+        m = OUTWARD_RE.search(body)
+        if m:
+            findings.append({
+                "rule": "outward_command",
+                "severity": "major",
+                "detail": f"{current}: adds `{m.group(1)}`",
+                "evidence": "reaches outside the repository; needs explicit authorization",
+            })
+    return findings
+
+
+def run_verification(command, cwd=".", timeout=600):
+    """Execute a verification command and capture the real result.
+
+    This is the one part of 'a report is a claim, not evidence' that cannot be
+    done by reading a diff: the command has to actually run.
+    """
+    import subprocess
+    import time
+    started = time.time()
+    try:
+        proc = subprocess.run(command, shell=True, cwd=cwd, capture_output=True,
+                              text=True, timeout=timeout)
+        return {
+            "command": command,
+            "exit_code": proc.returncode,
+            "duration_s": round(time.time() - started, 2),
+            "tail": (proc.stdout + proc.stderr).strip().splitlines()[-15:],
+        }
+    except subprocess.TimeoutExpired:
+        return {
+            "command": command,
+            "exit_code": "TIMEOUT",
+            "duration_s": round(time.time() - started, 2),
+            "tail": [f"exceeded {timeout}s"],
+        }
+
+
 def _glob_match(path, pattern):
     from fnmatch import fnmatch
     return fnmatch(path, pattern) or fnmatch(path, pattern.rstrip("/") + "/*")
@@ -414,7 +536,7 @@ def _words(text):
     return out
 
 
-def gate(spec, diff_text, allow_fraud_rules=()):
+def gate(spec, diff_text, allow_fraud_rules=(), verification=None):
     """Compare a delivered diff against its spec. Returns a verdict + findings.
 
     Verdicts:
@@ -528,6 +650,24 @@ def gate(spec, diff_text, allow_fraud_rules=()):
     # 6. Simplicity. The only Karpathy guideline with no check anywhere else.
     findings.extend(simplicity_findings(diff_text, spec))
 
+    # 7. Debris and outward commands. Both come from the judge's fraud catalogue;
+    #    neither needs a framework, just a regex over the added lines.
+    findings.extend(debris_findings(diff_text))
+    findings.extend(outward_findings(diff_text))
+
+    # 8. Re-run the claimed verification. This is the only claim a diff cannot
+    #    settle: "tests pass" is a report until the command is executed.
+    if verification:
+        if verification.get("exit_code") not in (0, "0"):
+            findings.append({
+                "rule": "verification_failed",
+                "severity": "blocker",
+                "detail": (f"`{verification['command']}` exited "
+                           f"{verification['exit_code']} after "
+                           f"{verification['duration_s']}s"),
+                "evidence": " | ".join(verification.get("tail") or [])[-300:],
+            })
+
     if any(f["severity"] == "blocker" for f in findings):
         verdict = "BLOCKED"
     elif any(f["severity"] in ("major",) for f in findings):
@@ -544,6 +684,7 @@ def gate(spec, diff_text, allow_fraud_rules=()):
         "criteria": len(spec.criteria),
         "declared_files": len(spec.declared_files),
         "diff": stats,
+        "verification": verification,
         "findings": findings,
     }
 

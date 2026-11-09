@@ -380,6 +380,95 @@ class TestSimplicity(unittest.TestCase):
         self.assertEqual(simplicity_findings(diff, Spec("x.md", COMPLETE_SPEC)), [])
 
 
+class TestJudgeReplacements(unittest.TestCase):
+    """The four items from fable-judge that the gate did not cover.
+
+    Adopting the framework would have meant a second set of verdict names,
+    a second report format, and another dependency to keep current. Each item
+    was a few lines of check instead.
+    """
+
+    def test_debug_statement_is_debris(self):
+        diff = """diff --git a/src/app.py b/src/app.py
+--- a/src/app.py
++++ b/src/app.py
+@@ -1,2 +1,3 @@
+ def run():
++    breakpoint()
+     return 1
+"""
+        result = gate(Spec("x.md", COMPLETE_SPEC), diff)
+        debris = [f for f in result["findings"] if f["rule"] == "debris"]
+        self.assertTrue(debris)
+        self.assertEqual(debris[0]["severity"], "major",
+                         "a debugger left in delivered code halts execution")
+
+    def test_scratch_file_is_debris(self):
+        diff = """diff --git a/scratch_notes.py b/scratch_notes.py
+--- /dev/null
++++ b/scratch_notes.py
+@@ -0,0 +1,2 @@
++tmp = 1
+"""
+        result = gate(Spec("x.md", COMPLETE_SPEC), diff)
+        self.assertIn("debris", [f["rule"] for f in result["findings"]])
+
+    def test_print_is_not_debris(self):
+        """`print` and `console.error` are legitimate output. Flagging them is
+        how a checker gets turned off."""
+        diff = """diff --git a/src/cli.py b/src/cli.py
+--- a/src/cli.py
++++ b/src/cli.py
+@@ -1,2 +1,3 @@
+ def main():
++    print("usage: app <file>")
+"""
+        result = gate(Spec("x.md", COMPLETE_SPEC), diff)
+        self.assertNotIn("debris", [f["rule"] for f in result["findings"]])
+
+    def test_outward_command_is_major(self):
+        diff = """diff --git a/Makefile b/Makefile
+--- a/Makefile
++++ b/Makefile
+@@ -1,2 +1,3 @@
+ deploy:
++	terraform apply -auto-approve
+"""
+        result = gate(Spec("x.md", COMPLETE_SPEC), diff)
+        outward = [f for f in result["findings"] if f["rule"] == "outward_command"]
+        self.assertTrue(outward, "terraform apply not flagged")
+        self.assertEqual(outward[0]["severity"], "major")
+
+    def test_failing_verification_blocks(self):
+        """The one claim a diff cannot settle. This is the core of 'a report is a
+        claim, not evidence'."""
+        verification = {"command": "pytest -q", "exit_code": 1,
+                        "duration_s": 2.1, "tail": ["2 failed, 7 passed"]}
+        result = gate(Spec("x.md", COMPLETE_SPEC), CLEAN_DIFF, verification=verification)
+        self.assertEqual(result["verdict"], "BLOCKED")
+        self.assertIn("verification_failed", [f["rule"] for f in result["findings"]])
+
+    def test_passing_verification_does_not_block(self):
+        verification = {"command": "pytest -q", "exit_code": 0,
+                        "duration_s": 1.0, "tail": ["9 passed"]}
+        result = gate(Spec("x.md", COMPLETE_SPEC), CLEAN_DIFF, verification=verification)
+        self.assertNotIn("verification_failed", [f["rule"] for f in result["findings"]])
+
+    def test_timeout_counts_as_failure(self):
+        verification = {"command": "pytest -q", "exit_code": "TIMEOUT",
+                        "duration_s": 600, "tail": ["exceeded 600s"]}
+        result = gate(Spec("x.md", COMPLETE_SPEC), CLEAN_DIFF, verification=verification)
+        self.assertIn("verification_failed", [f["rule"] for f in result["findings"]])
+
+    def test_run_verification_captures_real_exit_code(self):
+        from kairos_gate import run_verification
+        ok = run_verification("exit 0")
+        bad = run_verification("exit 3")
+        self.assertEqual(ok["exit_code"], 0)
+        self.assertEqual(bad["exit_code"], 3)
+        self.assertIn("command", ok)
+
+
 class TestDiffStats(unittest.TestCase):
     def test_counts_files_and_lines(self):
         st = diff_stats(CLEAN_DIFF)
