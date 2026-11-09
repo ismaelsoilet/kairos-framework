@@ -267,8 +267,25 @@ Its tiers, ledgers, three-round cap and resume protocol are process
 prescriptions for a human working with an agent; this project does not enforce
 them and does not claim to.
 
-### What was deliberately not adopted
+### First contact with a real project, and what it broke
 
+The gate was run against `fiscalizaplus`, a project using OpenSpec with specs
+written in Portuguese. It blocked a careful six-scenario spec as "too weak".
+
+Three things came out of that, all corrections to this repository:
+
+| What happened | Cause | Fixed |
+| :--- | :--- | :--- |
+| A good Portuguese spec scored 5/8 | the checklist matched English only | bilingual patterns; now 7/8 |
+| "Lista de não pode mudar" was ignored | the extractor matched English headings | same fix |
+| Every spec with a *Non-Goals* section scored one point too high | the heading was matched as both `scope` and `no_change_list` | removed from no-change, where it never belonged |
+
+After the fix, all 14 specs in that project's active changes score 7-8/8 and
+pass. The lesson is not "the gate works". It is that a checker validated only
+against fixtures written by its author will misjudge the first real input it
+sees, and will do so confidently.
+
+### What was deliberately not adopted
 - **A second set of verdict names.** Two frameworks with `VERIFIED` and `READY`
   for the same idea is exactly the noise this is trying to remove.
 - **Report formats.** fable-judge's claims table is good; the gate already
