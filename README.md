@@ -59,6 +59,25 @@ Exit code is 0 only on READY, so it drops into CI or a pre-push hook.
 | Acceptance criteria with no test in the diff | REPAIR |
 | Test deletion or weakened tests | REPAIR |
 
+### The cycle
+
+```bash
+kairos fit   --touches 4 --criteria 5        # should this even have a spec?
+kairos brainstorm --new dark_mode            # alternatives before commitment
+kairos scout                                 # live version check, no memory
+openspec propose dark-mode                   # the spec (OpenSpec owns this)
+kairos gate  --spec openspec/changes/dark-mode --base main
+```
+
+`scout` queries the npm, PyPI and crates registries at run time. It replaced a
+hardcoded list of "known breaking changes" that had itself gone stale — it named
+a major as current that the registry had already superseded twice. Nothing in
+this repository now states a package version from memory.
+
+`brainstorm` refuses a brief with fewer than three alternatives or with an
+alternative that has no rejection reason, because a spec with no recorded
+alternatives is not a decision.
+
 ### What it does not do
 
 It compares words, not meaning. It does not run your tests. It cannot tell a
