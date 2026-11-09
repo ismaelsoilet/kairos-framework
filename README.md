@@ -26,19 +26,51 @@
 
 ## What KAIROS is
 
-KAIROS is a set of conventions plus a zero-dependency Python CLI that impose a disciplined process on an AI coding agent:
+A zero-dependency CLI that closes one specific gap in spec-driven development:
+**the delivered code is never checked against the spec that authorised it.**
 
-- classify the task's risk before doing work
-- write a delta spec before writing code
-- implement inside an isolated `git worktree`
-- write the failing test first
-- mutate the implementation and confirm the tests catch it
-- scan the resulting `git diff` for signs that the agent cheated
-- archive the spec and record the lesson
+A controlled benchmark of 50 production tickets found that 7.9% of merged
+spec-driver tickets did not match their own spec. Every framework it tested —
+Spec Kit, Kiro, BMAD, OpenSpec — stops at approval. `kairos gate` is the step
+after.
 
-It does not generate code. It does not call a model. It has no opinion about which model you use. It is the part that refuses to take the agent's word for it.
+It also decides **whether a ticket deserves a spec at all**, because the same
+benchmark found zero benefit on bug-fix, refactor and test-writing tickets while
+the spec phase cost ~18 minutes and 35% of the tokens.
 
-Everything below is either implemented in `scripts/kairos_cli.py` or marked as not implemented. That distinction is the point of v1.2.
+```bash
+kairos fit  --touches 5 --criteria 6 --changes-schema-or-api   # should I spec this?
+kairos spec my_feature                                          # 8-section spec
+kairos gate --spec .kairos/changes/<id>/specs.md --base main    # does the diff match?
+```
+
+Exit code is 0 only on READY, so it drops into CI or a pre-push hook.
+
+### What the gate checks
+
+| Check | Verdict |
+| :--- | :--- |
+| Spec covers fewer than 6 of 8 measured sections | **BLOCKED** — a weak spec makes "matches the spec" meaningless |
+| A file on the no-change list was modified | **BLOCKED** |
+| Files touched that the spec never named | REPAIR |
+| Acceptance criteria with no test in the diff | REPAIR |
+| Test deletion or weakened tests | REPAIR |
+
+### What it does not do
+
+It compares words, not meaning. It does not run your tests. It cannot tell a
+deliberate deletion from a fraudulent one. Four of its scanner rules are **off by
+default** because their measured precision on real merged PRs was 0-17%. The full
+accounting, including what failed, is in [`docs/EVIDENCE.md`](docs/EVIDENCE.md)
+and [`docs/EXTERNAL_VALIDATION.md`](docs/EXTERNAL_VALIDATION.md).
+
+### It works with the frameworks you already use
+
+`kairos gate` parses KAIROS, EGM (`docs/designs/*.md`), OpenSpec
+(`openspec/changes/*`) and Spec Kit (`specs/*/spec.md`) layouts. It does not
+replace them and does not claim its format is better — the benchmark found no
+meaningful difference between any of them (±10pp noise band). It adds the check
+they skip.
 
 ---
 
@@ -194,6 +226,8 @@ kairos scout [--all] [--save-spec]              # manifest reconnaissance
 kairos spec <name>                              # 5-file delta spec
 kairos worktree create|remove|list <name>
 kairos mutate <file> --test "<cmd>" [--max-mutants N] [--timeout S]
+kairos gate --spec <path> --base main   # spec <-> diff consistency (0 = READY)
+kairos fit --touches N --criteria N    # should this ticket have a spec?
 kairos audit --base main [--worktree PATH|--root-only]
 kairos archive <change_id>
 kairos rollback [--worktree PATH|--root-only]
