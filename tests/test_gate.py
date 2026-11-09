@@ -469,6 +469,57 @@ class TestJudgeReplacements(unittest.TestCase):
         self.assertIn("command", ok)
 
 
+class TestBilingual(unittest.TestCase):
+    """The gate ran against a real project whose specs are in Portuguese and
+    reported a careful six-scenario spec as 5/8 'too weak'. The checker was
+    monolingual; the spec was fine. These lock in the fix."""
+
+    PT_SPEC = """# Feature: filtros de notificação
+
+## Objetivo
+Permitir filtrar notificações por autor.
+
+## Escopo
+Dentro: a listagem. Fora do escopo: relatórios.
+
+## Entradas e saídas
+Entrada: o filtro. Saída: a lista filtrada.
+
+## Dados
+Nenhuma migração. Usa a coluna existente.
+
+## Casos de borda
+- Se a consulta falhar, retornar lista vazia.
+- Usuário sem permissão recebe erro 403.
+
+## Testes de aceite
+- [ ] filtrar por autor retorna só os documentos dele
+
+## Restrições
+Não pode adicionar dependência. Deve ser compatível com mobile.
+
+## Lista de não pode mudar
+- `src/legacy/*`
+"""
+
+    def test_portuguese_spec_is_scored_fairly(self):
+        from kairos_gate import COMPLETENESS_THRESHOLD
+        s = Spec("x.md", self.PT_SPEC)
+        score, present, missing = s.completeness()
+        self.assertGreaterEqual(
+            score, COMPLETENESS_THRESHOLD,
+            f"a complete Portuguese spec scored {score}/8, missing {missing}")
+
+    def test_portuguese_no_change_list_is_parsed(self):
+        s = Spec("x.md", self.PT_SPEC)
+        self.assertTrue(s.no_change, "no-change list in Portuguese was not read")
+
+    def test_english_still_works(self):
+        from kairos_gate import COMPLETENESS_THRESHOLD
+        score, _, missing = Spec("x.md", COMPLETE_SPEC).completeness()
+        self.assertGreaterEqual(score, COMPLETENESS_THRESHOLD, f"missing {missing}")
+
+
 class TestDiffStats(unittest.TestCase):
     def test_counts_files_and_lines(self):
         st = diff_stats(CLEAN_DIFF)
@@ -526,7 +577,15 @@ Timeout, duplicate, 500.
 """
         s = Spec("design.md", egm)
         score, present, missing = s.completeness()
-        self.assertGreaterEqual(score, 5, f"EGM doc scored {score}, missing {missing}")
+        # 4/8 is the honest score for this fixture. It has no constraints and no
+        # no-change list, and it should not be credited for them. An earlier
+        # version of this test expected 5 because "Non-Goals" was being counted
+        # twice — once as scope, once as a no-change list. Double-counting made
+        # every spec look stronger than it was.
+        self.assertEqual(score, 4, f"EGM doc scored {score}, present {present}")
+        self.assertIn("scope", present)
+        self.assertNotIn("no_change_list", present,
+                         "a 'Non-Goals' heading is not a no-change list")
         self.assertGreater(len(s.criteria), 0)
 
 

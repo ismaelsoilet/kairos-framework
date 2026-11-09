@@ -29,15 +29,28 @@ from pathlib import Path
 
 # Matched against heading TEXT (already stripped of the '#' markers), not the raw
 # line, so these are plain substring patterns on the heading name.
+#
+# Bilingual on purpose. The first real project this ran against wrote its specs in
+# Portuguese, and a checker that only understands English reported a careful,
+# six-scenario spec as 5/8 "too weak". The words are the interface; the language
+# is not.
 CHECKLIST = [
-    ("goal",              [r"\bgoal", r"\bproblem\b", r"\bobjective", r"\bintent\b"]),
-    ("scope",             [r"\bscope\b", r"\bnon-?goals?\b"]),
-    ("inputs_outputs",    [r"\binputs?\b", r"\boutputs?\b", r"\binterfaces?\b", r"\bapi\b", r"\bcontract"]),
-    ("data_changes",      [r"\bdata\b", r"\bschemas?\b", r"\bmigrations?\b", r"\bmodels?\b", r"\bpayload"]),
-    ("edge_cases",        [r"\bedge cases?\b", r"\berror", r"\bfailure", r"\bexception"]),
-    ("acceptance_tests",  [r"\bacceptance\b", r"\btests?\b", r"\bverification\b", r"\bhow to (check|verify|prove)\b", r"\bvalidation\b"]),
-    ("constraints",       [r"\bconstraints?\b", r"\bperformance\b", r"\bsecurity\b", r"\bcompatib", r"\blimits?\b"]),
-    ("no_change_list",    [r"\bno[- ]change", r"\bmust not change\b", r"\binvariants?\b", r"\bnon-?goals?\b"]),
+    ("goal",              [r"\bgoal", r"\bproblem\b", r"\bobjective", r"\bintent\b",
+                           r"\bobjetivo", r"\bproblema", r"\bmotiva"]),
+    ("scope",             [r"\bscope\b", r"\bnon-?goals?\b", r"\bescopo", r"\bfora do escopo",
+                           r"\bnão[- ]objetivo"]),
+    ("inputs_outputs",    [r"\binputs?\b", r"\boutputs?\b", r"\binterfaces?\b", r"\bapi\b", r"\bcontract",
+                           r"\bentradas?\b", r"\bsaídas?\b", r"\bcontrato"]),
+    ("data_changes",      [r"\bdata\b", r"\bschemas?\b", r"\bmigrations?\b", r"\bmodels?\b", r"\bpayload",
+                           r"\bmigraç", r"\bmodelos?\b", r"\bbanco\b", r"\btabelas?\b"]),
+    ("edge_cases",        [r"\bedge cases?\b", r"\berror", r"\bfailure", r"\bexception",
+                           r"\berros?\b", r"\bfalh", r"\bexceç", r"\bborda\b"]),
+    ("acceptance_tests",  [r"\bacceptance\b", r"\btests?\b", r"\bverification\b", r"\bvalidation\b",
+                           r"\baceite\b", r"\btestes?\b", r"\bverificaç", r"\bvalidaç"]),
+    ("constraints",       [r"\bconstraints?\b", r"\bperformance\b", r"\bsecurity\b", r"\bcompatib",
+                           r"\blimits?\b", r"\brestriç", r"\bdesempenh", r"\bseguranç"]),
+    ("no_change_list",    [r"\bno[- ]change", r"\bmust not change\b", r"\binvariants?\b",
+                           r"\bnão pode mudar\b", r"\binalterad", r"\binvariantes?\b"]),
 ]
 
 # 6 of 8 is the measured threshold (89.3% vs 60.0% merge rate).
@@ -112,7 +125,8 @@ class Spec:
         """
         out = []
         for heading, body in self.sections.items():
-            if not re.search(r"no[- ]change|must not change|invariant", heading, re.IGNORECASE):
+            if not re.search(r"no[- ]change|must not change|invariant|não pode mudar|inalterad|invariante",
+                             heading, re.IGNORECASE):
                 continue
             for m in re.finditer(r"`([^`]+)`", body):
                 token = m.group(1).strip()
@@ -222,16 +236,20 @@ class OpenSpec(Spec):
         ]).lower()
 
         checks = {
-            "goal": bool(re.search(r"^#+\s*why\b", self.proposal, re.M | re.I))
+            "goal": bool(re.search(r"^#+\s*(why|objetivo|motiva)", self.proposal, re.M | re.I))
                     or "why" in self.proposal.lower()[:200],
-            "scope": bool(re.search(r"what changes|what's changing|scope", self.proposal, re.I)),
-            "inputs_outputs": bool(re.search(r"interface|endpoint|input|output|api|request|response", haystack)),
-            "data_changes": bool(re.search(r"schema|migration|model|database|data change", haystack)),
-            "edge_cases": bool(re.search(r"error|failure|invalid|edge case|raise|throw", haystack))
-                          or any(re.search(r"fail|error|invalid", (r["scenario"] or ""), re.I)
+            "scope": bool(re.search(r"what changes|what's changing|scope|escopo|alteraç", self.proposal, re.I)),
+            "inputs_outputs": bool(re.search(
+                r"interface|endpoint|input|output|api|request|response|entrada|saída|contrato|payload", haystack)),
+            "data_changes": bool(re.search(
+                r"schema|migration|model|database|data change|migraç|modelo|banco|tabela|coluna", haystack)),
+            "edge_cases": bool(re.search(
+                r"error|failure|invalid|edge case|raise|throw|erro|falh|inválid|exceç|borda|concorrênc", haystack))
+                          or any(re.search(r"fail|error|invalid|erro|falh|inválid", (r["scenario"] or ""), re.I)
                                  for r in self.requirements),
             "acceptance_tests": any(r["scenario"] for r in self.requirements),
-            "constraints": bool(re.search(r"constraint|must not|dependenc|performance|security", haystack)),
+            "constraints": bool(re.search(
+                r"constraint|must not|dependenc|performance|security|restriç|não pode|não deve|desempenh|seguranç|compatib", haystack)),
             "no_change_list": bool(self._extract_no_change_openspec()),
         }
         for name, ok in checks.items():
