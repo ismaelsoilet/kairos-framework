@@ -19,7 +19,7 @@ Executado na v1.2, sobre o código deste repositório:
 
 | Verificação | Comando | Resultado |
 | :--- | :--- | :--- |
-| Suíte de testes passa | `python3 -m unittest tests/test_cli_features.py` | 39 testes, exit 0 |
+| Suíte de testes passa | `python3 -m unittest tests/test_cli_features.py` | 40 testes, exit 0 |
 | Scanner contra corpus rotulado | `python3 benchmark/eval_corpus.py` | recall 100%, precision 96% (1 falso positivo conhecido) |
 | Scanner audita o próprio código | `python3 scripts/kairos_cli.py audit --base HEAD --root-only` | sim — a exclusão do próprio arquivo foi removida |
 | Audit exige evidência de mutação | teste `test_audit_requires_mutation_evidence_before_verified` | sim — diff limpo sem K-Mutant resulta em `REPAIR` |

@@ -20,10 +20,10 @@
 
 | claim_id | file | text | value | type | artifact | command | date | status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| C-001 | `tests/` | Test suite passes | 37 tests, exit 0 | MEASURED | `tests/test_cli_features.py` | `python3 -m unittest tests/test_cli_features.py` | 2026-11-08 | MEASURED |
+| C-001 | `tests/` | Test suite passes | 40 tests, exit 0 | MEASURED | `tests/test_cli_features.py` | `python3 -m unittest tests/test_cli_features.py` | 2026-11-08 | MEASURED |
 | C-002 | `README.md` | Scanner detects 3 of 8 probed fraud patterns | 3/8 | MEASURED | probe transcript in `RETRACTION.md` | manual probe, see RETRACTION.md table | 2026-11-08 | MEASURED |
 | C-003 | `README.md` | Scanner does not catch 5 named pattern classes | list of 5 | MEASURED | same probe | same probe | 2026-11-08 | MEASURED |
-| C-004 | `benchmark/case_study_gemini_n1/` | Vibe arm active tokens | 112,319 (102,897 in + 9,422 out) | CASE_STUDY | `benchmark/case_study_gemini_n1/run.py` over two preserved transcripts | `python3 benchmark/case_study_gemini_n1/run.py` | 2026-11-08 | CASE_STUDY |
+| C-004 | `benchmark/case_study_gemini_n1/` | Vibe arm active tokens | 112,319 (102,897 in + 9,422 out) | CASE_STUDY | `benchmark/case_study_gemini_n1/run_real_gemini_benchmark.py` over two preserved transcripts | `python3 benchmark/case_study_gemini_n1/run_real_gemini_benchmark.py` | 2026-11-08 | CASE_STUDY |
 | C-005 | `benchmark/case_study_gemini_n1/` | KAIROS arm active tokens | 90,676 (69,589 in + 21,087 out) | CASE_STUDY | same | same | 2026-11-08 | CASE_STUDY |
 | C-006 | `benchmark/case_study_gemini_n1/` | KAIROS arm output tokens vs vibe arm | 21,087 vs 9,422 (2.2×) | CASE_STUDY | same | same | 2026-11-08 | CASE_STUDY |
 | C-007 | `benchmark/case_study_gemini_n1/` | KAIROS arm permission retries | 9 | CASE_STUDY | same | same | 2026-11-08 | CASE_STUDY |

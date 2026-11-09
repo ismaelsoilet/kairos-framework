@@ -623,5 +623,40 @@ deleted file mode 100644
                 temp_file.unlink()
             save_state(orig_state, REPO_ROOT)
 
+    def test_worktree_create_and_remove_lifecycle(self):
+        """v1.2: worktree create/remove had no test at all. Exiting 0 is not proof it works."""
+        from kairos_cli import cmd_worktree
+        name = "v12_lifecycle_probe"
+        branch = f"kairos/{name}"
+        wt_path = get_kairos_dir(REPO_ROOT) / "worktrees" / name
+        before = load_state(REPO_ROOT)
+
+        class CreateArgs:
+            action = "create"
+            name = "v12_lifecycle_probe"
+
+        class RemoveArgs:
+            action = "remove"
+            name = "v12_lifecycle_probe"
+
+        try:
+            self.assertEqual(cmd_worktree(CreateArgs()), 0)
+            self.assertTrue(wt_path.is_dir(), "worktree directory was not created")
+            branches = subprocess.run(["git", "branch", "--list", branch],
+                                      cwd=REPO_ROOT, capture_output=True, text=True).stdout
+            self.assertIn(branch, branches, "task branch was not created")
+
+            self.assertEqual(cmd_worktree(RemoveArgs()), 0)
+            self.assertFalse(wt_path.is_dir(), "worktree directory survived removal")
+            branches = subprocess.run(["git", "branch", "--list", branch],
+                                      cwd=REPO_ROOT, capture_output=True, text=True).stdout
+            self.assertNotIn(branch, branches, "task branch survived removal")
+        finally:
+            if wt_path.is_dir():
+                subprocess.run(["git", "worktree", "remove", "--force", str(wt_path)],
+                               cwd=REPO_ROOT, capture_output=True)
+            subprocess.run(["git", "branch", "-D", branch], cwd=REPO_ROOT, capture_output=True)
+            save_state(before, REPO_ROOT)
+
 if __name__ == "__main__":
     unittest.main()
