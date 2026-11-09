@@ -520,6 +520,101 @@ Não pode adicionar dependência. Deve ser compatível com mobile.
         self.assertGreaterEqual(score, COMPLETENESS_THRESHOLD, f"missing {missing}")
 
 
+class TestCLIWiring(unittest.TestCase):
+    """`fit`, `brainstorm`, `archive` and `export` shipped with no test that
+    exercises the command as a user runs it. Testing the pure functions is not
+    the same thing: the wiring is where a wrong argument name or a missing branch
+    lives.
+    """
+
+    def _run(self, argv):
+        import subprocess
+        script = Path(__file__).resolve().parent.parent / "scripts" / "kairos_cli.py"
+        return subprocess.run([sys.executable, str(script)] + argv,
+                              capture_output=True, text=True, timeout=60)
+
+    def test_fit_says_no_spec_for_a_bugfix(self):
+        r = self._run(["fit", "--touches", "1", "--criteria", "1"])
+        self.assertEqual(r.returncode, 0)
+        self.assertIn("NO_SPEC", r.stdout)
+
+    def test_fit_says_spec_for_a_multi_file_change(self):
+        r = self._run(["fit", "--touches", "6", "--criteria", "5",
+                       "--changes-schema-or-api", "--crosses-boundary"])
+        self.assertIn("SPEC", r.stdout)
+        self.assertNotIn("NO_SPEC", r.stdout)
+
+    def test_brainstorm_new_refuses_to_overwrite(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "brief.md"
+            target.write_text("existing\n", encoding="utf-8")
+            r = self._run(["brainstorm", "--new", "x", "--out", str(target)])
+            self.assertNotEqual(r.returncode, 0, "overwrote an existing brief")
+            self.assertEqual(target.read_text(encoding="utf-8"), "existing\n")
+
+    def test_brainstorm_check_fails_on_empty_brief(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            brief = Path(tmp) / "brief.md"
+            brief.write_text("# Brainstorm\n\n## Problem\nsomething\n", encoding="utf-8")
+            r = self._run(["brainstorm", "--check", str(brief)])
+            self.assertNotEqual(r.returncode, 0, "an empty brief was accepted")
+
+    def test_brainstorm_check_passes_on_a_real_brief(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            brief = Path(tmp) / "brief.md"
+            brief.write_text("""# Brainstorm: x
+## Problem
+Something is wrong.
+## Alternatives considered
+
+1. **First**
+   - Why rejected: too slow
+2. **Second**
+   - Why rejected: too complex
+3. **Third**
+   - Chosen
+## Chosen approach
+Third.
+## Assumptions
+None verified.
+## Open questions
+How does it scale?
+## What would make this wrong
+If latency doubles under load.
+""", encoding="utf-8")
+            r = self._run(["brainstorm", "--check", str(brief)])
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_gate_without_verify_says_it_did_not_run(self):
+        import tempfile, subprocess
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            for cmd in (["git", "init", "-q", "-b", "main"],
+                        ["git", "config", "user.email", "t@e.co"],
+                        ["git", "config", "user.name", "t"]):
+                subprocess.run(cmd, cwd=repo, check=True)
+            (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
+            subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-qm", "init"], cwd=repo, check=True)
+            # The change lives on its own branch; comparing with main while
+            # sitting on main produces an empty diff.
+            subprocess.run(["git", "checkout", "-q", "-b", "feature"], cwd=repo, check=True)
+            (repo / "b.py").write_text("y = 2\n", encoding="utf-8")
+            subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-qm", "change"], cwd=repo, check=True)
+            spec = Path(tmp) / "spec.md"
+            spec.write_text(COMPLETE_SPEC.replace(
+                "## Scope", "## Implementation\n\n- `b.py`\n\n## Scope"), encoding="utf-8")
+
+            r = self._run(["gate", "--spec", str(spec), "--base", "main",
+                           "--worktree", str(repo)])
+            self.assertIn("NOT RUN", r.stdout,
+                          "the gate must say the verification was not run")
+
+
 class TestDiffStats(unittest.TestCase):
     def test_counts_files_and_lines(self):
         st = diff_stats(CLEAN_DIFF)

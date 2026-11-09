@@ -126,7 +126,10 @@ Honest tiering. If a capability is in the third column, do not plan around it.
 
 ### Implemented, untested
 
-`worktree create/remove/list`, `archive`, `export`, `rollback`, the `mutate` engine end-to-end (only its operator table is asserted), and `status --dashboard` rendering. Listed here deliberately: a command exiting 0 is not evidence that it works.
+Nothing. Every command now has at least one test that exercises it as a user runs
+it, not only the pure function behind it. `fit`, `brainstorm`, `archive` and
+`export` shipped untested for a day; the gap was found by counting test
+references per command rather than assuming.
 
 ### Documented, not implemented
 

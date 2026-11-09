@@ -13,6 +13,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from kairos_cli import (
     cmd_status, cmd_rollback, cmd_mutate, cmd_token, cmd_spec,
     cmd_update, cmd_registry, cmd_lesson, cmd_scout, cmd_dial, cmd_audit,
+    cmd_archive, cmd_export,
     parse_project_dependencies, HIGH_RISK_CUTOFF_PACKAGES, StateLock,
     scan_diff_text, save_state, load_state, get_kairos_dir, MUTATION_OPS
 )
@@ -726,6 +727,66 @@ deleted file mode 100644
             probe = [v for v in report["violations"] if v["file"] == "test_probe.py"]
             self.assertEqual(len(probe), 1,
                              f"the same untracked file was reported {len(probe)} times")
+
+    def test_archive_promotes_spec_and_clears_active_change(self):
+        """`archive` had no test. It is the command that ends a change, and a
+        silent failure there means the spec is never promoted."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            subprocess.run(["git", "init", "-q", "-b", "main"], cwd=repo, check=True)
+            subprocess.run(["git", "config", "user.email", "t@e.co"], cwd=repo, check=True)
+            subprocess.run(["git", "config", "user.name", "t"], cwd=repo, check=True)
+
+            change = repo / ".kairos" / "changes" / "20260101_000000_my_feature"
+            change.mkdir(parents=True)
+            (change / "specs.md").write_text("# Spec\nA contract.\n", encoding="utf-8")
+            (repo / ".kairos" / "state.json").write_text(
+                json.dumps({"current_stage": "VERIFIED",
+                            "active_change": "20260101_000000_my_feature",
+                            "history": []}), encoding="utf-8")
+
+            class Args:
+                name = None
+
+            prev = os.getcwd()
+            os.chdir(repo)
+            try:
+                code = cmd_archive(Args())
+            finally:
+                os.chdir(prev)
+
+            self.assertEqual(code, 0)
+            promoted = repo / ".kairos" / "specs" / "my_feature.md"
+            self.assertTrue(promoted.exists(), "spec was not promoted to .kairos/specs/")
+            self.assertIn("A contract.", promoted.read_text(encoding="utf-8"))
+            state = json.loads((repo / ".kairos" / "state.json").read_text(encoding="utf-8"))
+            self.assertIsNone(state["active_change"], "active_change was not cleared")
+            self.assertEqual(state["current_stage"], "SHIPPED")
+
+    def test_export_writes_the_harness_files(self):
+        """`export` had no test. It writes files into the user's repository."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            subprocess.run(["git", "init", "-q", "-b", "main"], cwd=repo, check=True)
+            subprocess.run(["git", "config", "user.email", "t@e.co"], cwd=repo, check=True)
+            subprocess.run(["git", "config", "user.name", "t"], cwd=repo, check=True)
+
+            class Args:
+                target = "all"
+
+            prev = os.getcwd()
+            os.chdir(repo)
+            try:
+                code = cmd_export(Args())
+            finally:
+                os.chdir(prev)
+
+            self.assertEqual(code, 0)
+            self.assertTrue((repo / "CLAUDE.md").exists())
+            self.assertTrue((repo / ".cursorrules").exists())
+            self.assertTrue((repo / "AGENTS.md").exists())
 
     def test_worktree_create_and_remove_lifecycle(self):
         """v1.2: worktree create/remove had no test at all. Exiting 0 is not proof it works."""
