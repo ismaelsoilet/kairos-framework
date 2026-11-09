@@ -141,6 +141,15 @@ cd your-project
 python3 /path/to/kairos-framework/scripts/kairos_cli.py init
 ```
 
+### In CI
+
+[`examples/github-actions/kairos-gate.yml`](examples/github-actions/kairos-gate.yml)
+runs the gate on every pull request and fails when the verdict is not READY. It
+needs `fetch-depth: 0`, because the gate diffs against the base branch.
+
+`gate --json` writes one parseable document to stdout and its progress to stderr,
+so `gate --json > out.json` works.
+
 ### Command reference
 
 ```bash

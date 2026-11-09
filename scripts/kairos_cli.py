@@ -1198,15 +1198,20 @@ def cmd_gate(args):
 
     verification = None
     verify_cmd = getattr(args, "verify", None)
+    as_json = getattr(args, "json", False)
     if verify_cmd:
-        print(f"▶ Re-running the claimed verification: {verify_cmd}")
+        # Progress goes to stderr when --json is requested, so stdout stays a
+        # single parseable document. A CI job doing `gate --json > out.json`
+        # otherwise gets a file that json.loads rejects.
+        progress = sys.stderr if as_json else sys.stdout
+        print(f"▶ Re-running the claimed verification: {verify_cmd}", file=progress)
         verification = kairos_gate.run_verification(str(verify_cmd), cwd=str(target))
         status = verification["exit_code"]
-        print(f"  exit={status} in {verification['duration_s']}s")
+        print(f"  exit={status} in {verification['duration_s']}s", file=progress)
         if verification["tail"]:
             for ln in verification["tail"][-5:]:
-                print(f"    {ln[:110]}")
-        print()
+                print(f"    {ln[:110]}", file=progress)
+        print(file=progress)
 
     result = kairos_gate.gate(
         kairos_gate.parse_spec(spec_path),

@@ -1,97 +1,147 @@
-# KAIROS Core Directives: The Autonomous Engineering Standard
+# KAIROS Core Directives
 
-You are operating under the **KAIROS SDLC Framework** (The Adaptive Protocol for Engineering Excellence).
+You are operating under KAIROS. This file is what the agent reads. It describes
+only what exists; anything not listed here was removed in v1.3 and is in
+`docs/archive/`.
 
-## 1. The Core Philosophy
+## 1. What this is
 
-> **"A medida exata, no momento certo, sem desperdício de tokens nem tolerância a fraudes."**
+Four checks that a model cannot do by reasoning:
 
-KAIROS combines the best practices of modern software engineering:
-1. **Cognitive Spec Validation:** Elephant (deep context) for drafting, Goldfish (zero context) for adversarial review.
-2. **Delta Specs:** Requirements tracked as additions, modifications, or removals in `.kairos/changes/` and promoted to `.kairos/specs/`.
-3. **Surgical Execution:** Isolated workspaces via `git worktree`, strict TDD (Red-Green-Refactor), and reproducible debugging.
-4. **Adversarial Zero-Trust Audit:** Git diff is ground truth. A report is only a set of claims until proven by code and test output.
-5. **Dynamic Token Budgeting:** Elastic scaling based on task risk.
+| Command | Question |
+| :--- | :--- |
+| `kairos fit` | should this ticket have a spec at all? |
+| `kairos brainstorm` | what did we reject, and what would prove this wrong? |
+| `kairos gate` | does the delivered diff match the approved spec? |
+| `kairos audit` | did the change weaken a test? |
+
+There is no classifier, no lifecycle, no telemetry header, no worktree, no
+subagent roster. Do not invent them, and do not run commands that are not in
+this list.
 
 ---
 
-## 2. Telemetry & Real-Time Tracking Rule (MANDATORY)
+## 2. The five iron laws
 
-Every response or milestone turn operating under KAIROS governance **MUST display the real-time telemetry header** at the top of the output:
+1. **No production code without a failing test.** If you did not watch it fail,
+   you do not know what it tests. Code written before a test must be discarded.
+2. **No guesswork in debugging.** Reproduce the defect in a minimal test before
+   touching production code.
+3. **Ground truth is `git diff` and command output.** A report is a set of
+   claims. "Tests pass" is a claim until the exit code is in front of someone.
+4. **Hunt the six classic frauds** — weakened checks, false completion, scope
+   creep, unauthorized action, spec betrayal, debris.
+5. **Declare the invariants.** A spec must say what must not change, or there is
+   nothing to check the diff against.
 
-```text
-⚡ [KAIROS | Stage: <STAGE> | Mode: <MODE> | Tokens: <CONSUMED>/<CAP> tok | Left: <REMAINING>]
+Law 3 is the one this project violated most thoroughly. It is why `gate` exists
+and why `--verify` runs the command instead of believing the summary.
+
+---
+
+## 3. When to write a spec
+
+Run the fit test first. On bug-fix, refactor and test-writing tickets the
+measured gain was **0 percentage points** while the spec phase cost about 18
+minutes and 35% of the tokens.
+
+```bash
+kairos fit --touches 4 --criteria 5 --crosses-boundary
 ```
-* **Stages:** `IDLE` -> `CLASSIFIED` -> `RESEARCHING` -> `BRAINSTORMING` -> `SPECIFYING` -> `BUILDING` -> `AUDITING` -> `VERIFIED` -> `SHIPPED`.
-* Run `python3 scripts/kairos_cli.py status --header-only` to get the exact header string.
+
+Write a spec when **three or more** are true:
+
+- the change touches three or more files
+- it has four or more acceptance criteria
+- it crosses a module, service or repository boundary
+- it alters a data schema or a public API
+- more than one agent or engineer will work on it
+- the code is regulated or audited
+
+Fewer than three: give the agent the ticket text and the acceptance criteria,
+then review the diff. Skipping the ceremony is the correct output.
 
 ---
 
-## 3. The Elastic Dial (Token Economics)
+## 4. The spec must be complete enough to check against
 
-Before executing any request, calibrate the task risk and determine the **Execution Mode**:
+`kairos spec` generates eight sections. Do not delete one without a one-line
+reason. Specs covering six or more merged 89.3% of the time; fewer merged 60.0%.
 
-### MODE ALPHA (Lite / UI / Low-Risk)
-* **Triggers:** UI components, CSS styling, typos, text updates, non-critical layout changes, single-file edits (<30 LOC).
-* **Token Budget:** ~5,000 - 15,000 tokens.
-* **Protocol:**
-  * **Zero Subagents:** Do NOT spawn external subagents.
-  * **In-Turn Spec:** State a 3-point intent in chat (`Goal`, `Target File`, `Visual Verification`).
-  * **Direct Edit:** Edit in place (no worktree required).
-  * **Diff Check:** Verify that no global styles leaked, accessibility (a11y) is intact, and no debris was left.
+| Section | What breaks without it |
+| :--- | :--- |
+| Goal | the agent optimises for the wrong outcome |
+| Scope | work expands into neighbours |
+| Inputs and outputs | types get guessed |
+| Data changes | migrations are forgotten |
+| Edge cases | only the happy path is built |
+| Acceptance tests | drift becomes undetectable |
+| Constraints | a dependency appears from nowhere |
+| No-change list | unrelated files get rewritten |
 
-### MODE BETA (Standard / Feature / Brownfield)
-* **Triggers:** New API endpoint, database query, business rule modification, multi-file feature.
-* **Token Budget:** ~30,000 - 65,000 tokens.
-* **Protocol:**
-  * **Delta Spec:** Scaffold `.kairos/changes/<id>/` (`proposal.md`, `specs.md`, `tasks.md`).
-  * **Worktree Isolation:** Work in `.kairos/worktrees/<id>` or isolated branch.
-  * **Strict TDD:** Red (watch test fail) -> Green (minimal code) -> Refactor.
-  * **Sanity Diff Check:** Run `kairos audit` or check git diff for stub code or skipped tests.
-
-### MODE GAMMA (Critical / Architecture / Enterprise)
-* **Triggers:** Authentication, cryptography, payment/billing, database migrations, state machine changes, public contract modifications.
-* **Token Budget:** ~120,000 - 200,000 tokens.
-* **Protocol:**
-  * **Elephant & Goldfish:** Write complete Delta Spec; spawn `kairos_critic` (zero-context subagent) to stress-test assumptions.
-  * **Worktree & Subagents:** Isolated worktree with separate implementer and reviewer.
-  * **Full Adversarial Audit:** Subagent `kairos_auditor` hunts the 6 classic frauds. Formal Evidence Audit Table with gate status (`READY`, `REPAIR`, or `BLOCKED`).
+The no-change list is the only section that becomes a hard block. Be literal:
+`src/billing/legacy.py`, `api/v1/**`.
 
 ---
 
-## 4. O Que o KAIROS FAZ e O Que NÃO FAZ (Limites Claros de Escopo)
+## 5. Before coding
 
-### ✅ O QUE O KAIROS FAZ:
-1. **Governa a Cognição do Agente:** Impede que o modelo seja condescendente (*sycophancy*) através de revisores sem memória (`kairos_critic`).
-2. **Orça por Complexidade:** Aloca orçamentos dinâmicos por complexidade (Alpha/Beta/Gamma) para que tarefas simples não paguem o custo de um pipeline completo. **A economia resultante não foi medida** — o classificador é casamento de palavra-chave e não há dado de consumo real (ver `RETRACTION.md`).
-3. **Isola o Workspace:** Impede desastres e poluição na branch principal usando `git worktree`.
-4. **Impõe TDD e Red-Green-Refactor:** Bloqueia a escrita de código de produção sem antes ver o teste correspondente falhar.
-5. **Caça Fraudes de Código:** Audita o `git diff` real procurando testes comentados, `try/catch` vazios e funções stubs.
-6. **Mantém Documentação Viva:** Transforma requisitos em Delta Specs e atualiza a base canônica (`.kairos/specs/`).
+`kairos brainstorm --check` refuses a brief with fewer than three alternatives,
+an alternative with no rejection reason, or no "what would make this wrong"
+section. That is deliberate: a spec that commits to one design without recording
+what it rejected is not a decision.
 
-### ❌ O QUE O KAIROS NÃO FAZ:
-1. **NÃO é um LLM próprio:** O KAIROS não gera tokens por si só; ele governa e orquestra Modelos de Fronteira e Raciocínio (ex: Claude, Gemini, OpenAI, DeepSeek).
-2. **NÃO adivinha visão de produto:** Ele não toma decisões de negócio pelo usuário. Ele exige aprovação humana nos portões de especificação.
-3. **NÃO substitui linters de compilador:** Ele não é um SonarQube; ele foca em integridade de intenção, regressões comportamentais e desvios de IA.
-4. **NÃO aceita conclusões verbais:** "Está pronto", "tudo funcionando" ou "testes passaram" não têm valor sem a saída do comando no terminal.
-5. **NÃO executa ações destrutivas sem autorização:** Não faz push para repositórios remotos, deploy ou exclusão de banco sem confirmação explícita.
+If your harness can spawn a fresh-context reviewer, use one to attack the spec
+before implementation. A reviewer inside the same conversation inherits its blind
+spots. If you cannot spawn one, say so — do not pretend a same-context review is
+a review.
 
 ---
 
-## 5. The Iron Laws of KAIROS
+## 6. Before declaring done
 
-1. **NO PRODUCTION CODE WITHOUT FAILING TEST (In Beta/Gamma):**
-   If you didn't watch the test fail, you don't know what it tests. Code written before a test must be discarded.
-2. **NO GUESSWORK IN DEBUGGING:**
-   Never apply speculative fixes. Always reproduce the defect in a minimal test before touching production code.
-3. **GROUND TRUTH IS GIT DIFF:**
-   Agent claims are meaningless without verifiable command output and diff inspection.
-4. **HUNT THE 6 CLASSIC FRAUDS:**
-   - Weakened Checks
-   - False Completion
-   - Scope Creep
-   - Unauthorized Action
-   - Spec Betrayal
-   - Debris
-5. **LIVING SPECIFICATIONS:**
-   Upon task completion, specifications must be archived to `.kairos/specs/`.
+```bash
+kairos gate --spec <path> --base main --verify "<test command>"
+```
+
+`0` is READY. Anything else is not.
+
+| Verdict | Meaning |
+| :--- | :--- |
+| **READY** | spec complete, diff consistent, the command ran and passed |
+| **REPAIR** | scope drift, unmatched criteria, debris, or a fraud pattern |
+| **BLOCKED** | spec too weak to trust, a no-change violation, or the command failed |
+
+Report the verdict by quoting the command output. Do not paraphrase it.
+
+**If the gate says REPAIR and you ship anyway, say so and say why.** An honest
+REPAIR that was overridden is worth more than a fabricated READY.
+
+---
+
+## 7. What the gate cannot check
+
+State these limits whenever you report a verdict:
+
+- It compares words, not meaning. A test named after a criterion but asserting
+  nothing passes.
+- It does not run the tests unless `--verify` is given.
+- It cannot tell an intentional deletion from a fraudulent one.
+- Three scanner rules are off by default because their measured precision on real
+  merged pull requests was 0–17%. Do not enable them and then complain about
+  noise.
+- `gate` reads English and Portuguese specs. Other languages score low, and that
+  is a limitation of the checker, not a judgment on the spec.
+
+A green gate is not proof of correctness. It is proof that nobody weakened the
+tests, drifted from the spec, or left a debugger in the diff — which is a
+different and smaller claim.
+
+---
+
+## 8. Destructive actions
+
+Never push, deploy, publish, drop a table, or delete shared data without explicit
+authorization. `kairos gate` reports `outward_command` findings as REPAIR for
+exactly this reason: adding a deploy script is often correct, but a human has to
+see it first.

@@ -615,6 +615,46 @@ If latency doubles under load.
                           "the gate must say the verification was not run")
 
 
+    def test_json_output_is_parseable(self):
+        """`gate --json --verify` used to print progress before the JSON, so a CI
+        job capturing stdout got a file json.loads rejects. Found while writing
+        the GitHub Actions example, not by reading the code."""
+        import json as _json
+        import tempfile, subprocess
+        script = Path(__file__).resolve().parent.parent / "scripts" / "kairos_cli.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            for cmd in (["git", "init", "-q", "-b", "main"],
+                        ["git", "config", "user.email", "t@e.co"],
+                        ["git", "config", "user.name", "t"]):
+                subprocess.run(cmd, cwd=repo, check=True)
+            (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
+            subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-qm", "init"], cwd=repo, check=True)
+            subprocess.run(["git", "checkout", "-q", "-b", "feature"], cwd=repo, check=True)
+            (repo / "b.py").write_text("y = 2\n", encoding="utf-8")
+            subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-qm", "change"], cwd=repo, check=True)
+            spec = repo / "spec.md"
+            spec.write_text(COMPLETE_SPEC.replace(
+                "## Scope", "## Implementation\n\n- `b.py`\n\n## Scope"), encoding="utf-8")
+
+            r = subprocess.run(
+                [sys.executable, str(script), "gate", "--spec", str(spec),
+                 "--base", "main", "--worktree", str(repo),
+                 "--verify", "true", "--json"],
+                capture_output=True, text=True, timeout=90, cwd=repo)
+
+            parsed = _json.loads(r.stdout)   # raises if polluted
+            # The point of this test is that stdout parses as one JSON document.
+            # The verdict itself depends on fixture details, so it is only
+            # checked for being a real verdict.
+            self.assertIn(parsed["verdict"], ("READY", "REPAIR", "BLOCKED"))
+            self.assertEqual(parsed["verification"]["exit_code"], 0)
+            self.assertIn("Re-running", r.stderr,
+                          "progress should go to stderr when --json is set")
+
+
 class TestDiffStats(unittest.TestCase):
     def test_counts_files_and_lines(self):
         st = diff_stats(CLEAN_DIFF)

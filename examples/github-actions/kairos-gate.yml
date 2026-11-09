@@ -1,0 +1,127 @@
+name: kairos gate
+
+# Verifies that a pull request matches the spec that authorised it.
+#
+# Two things make this different from a test run:
+#   1. it fails when the diff touches a file the spec said must not change;
+#   2. it fails when the spec is too weak to mean anything.
+#
+# It does not replace your tests. `--verify` runs them and blocks on a failure,
+# but the value here is the check nothing else makes.
+#
+# Setup, once per repository:
+#   - put the spec somewhere in the repo (e.g. docs/specs/<feature>.md)
+#   - copy this file to .github/workflows/kairos-gate.yml
+#   - set KAIROS_SPEC below, or pass it as a workflow input
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      spec:
+        description: "Path to the spec to verify against"
+        required: false
+        type: string
+      verify:
+        description: "Test command to re-run as evidence (optional)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    env:
+      # Change this to your spec path, or leave empty and pass it on dispatch.
+      KAIROS_SPEC: ${{ inputs.spec || 'docs/specs/feature.md' }}
+      KAIROS_VERIFY: ${{ inputs.verify || 'pytest -q' }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The gate diffs against the base branch, so it needs the history.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install KAIROS
+        run: |
+          git clone --depth 1 https://github.com/ismaelsoilet/kairos-framework.git /tmp/kairos
+
+      - name: Check the spec exists
+        run: |
+          if [ ! -f "$KAIROS_SPEC" ]; then
+            echo "::error::No spec at '$KAIROS_SPEC'."
+            echo "A pull request without a spec cannot be verified against one."
+            echo "Either add the spec, or say in the PR that this change is small"
+            echo "enough not to need one (kairos fit --touches 1 --criteria 1)."
+            exit 1
+          fi
+
+      - name: Install test dependencies
+        run: |
+          # Adapt to your project. If nothing to install, leave as is.
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f pyproject.toml ]; then pip install -e . || true; fi
+          pip install pytest || true
+
+      - name: Gate
+        id: gate
+        run: |
+          set +e
+          python3 /tmp/kairos/scripts/kairos_cli.py gate \
+            --spec "$KAIROS_SPEC" \
+            --base "origin/${{ github.base_ref || 'main' }}" \
+            --verify "$KAIROS_VERIFY" \
+            --json > gate.json
+          code=$?
+          # Capture the gate's own exit code, not the redirect's.
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit $code
+        continue-on-error: true
+
+      - name: Report
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, os
+          p = pathlib.Path("gate.json")
+          if not p.exists():
+              print("::error::gate produced no output")
+              raise SystemExit(1)
+          r = json.loads(p.read_text())
+          v = r["verdict"]
+          icon = {"READY": "✅", "REPAIR": "🟡", "BLOCKED": "⛔"}.get(v, "?")
+          print(f"## {icon} KAIROS gate: {v}\n")
+          print(f"- spec completeness: **{r['completeness']}/8**")
+          print(f"- acceptance criteria: {r['criteria']}")
+          print(f"- diff: {len(r['diff']['files'])} file(s), "
+                f"+{r['diff']['added']}/-{r['diff']['removed']}")
+          ver = r.get("verification")
+          if ver:
+              print(f"- verification: `{ver['command']}` → exit {ver['exit_code']}")
+          else:
+              print("- verification: **NOT RUN** — 'tests pass' stays a claim")
+          if r["findings"]:
+              print("\n### Findings\n")
+              for f in r["findings"]:
+                  print(f"- **[{f['severity']}] {f['rule']}** — {f['detail']}")
+          else:
+              print("\nNo findings.")
+          PY
+          cat gate.json >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Fail on non-READY
+        if: steps.gate.outcome == 'failure'
+        run: |
+          echo "::error::The gate did not return READY. See the report above."
+          echo "READY requires: a complete spec, no no-change violation, no scope"
+          echo "drift, every acceptance criterion mapped to a test, and a passing"
+          echo "--verify command."
+          exit 1
