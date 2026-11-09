@@ -30,9 +30,12 @@ A zero-dependency CLI that closes one specific gap in spec-driven development:
 **the delivered code is never checked against the spec that authorised it.**
 
 A controlled benchmark of 50 production tickets found that 7.9% of merged
-spec-driver tickets did not match their own spec. Every framework it tested —
-Spec Kit, Kiro, BMAD, OpenSpec — stops at approval. `kairos gate` is the step
-after.
+spec-driven tickets did not match their own spec. OpenSpec goes furthest toward
+closing that: its `/opsx:verify` checks the implementation before archive, and it
+had the lowest measured drift of any framework (2.4% vs 4.9-12.5%).
+
+`kairos gate` is the part `/opsx:verify` leaves advisory: it fails the build on a
+no-change violation or an under-specified spec, with an exit code.
 
 It also decides **whether a ticket deserves a spec at all**, because the same
 benchmark found zero benefit on bug-fix, refactor and test-writing tickets while
@@ -64,13 +67,14 @@ default** because their measured precision on real merged PRs was 0-17%. The ful
 accounting, including what failed, is in [`docs/EVIDENCE.md`](docs/EVIDENCE.md)
 and [`docs/EXTERNAL_VALIDATION.md`](docs/EXTERNAL_VALIDATION.md).
 
-### It works with the frameworks you already use
+### It is a back end, not a framework
 
-`kairos gate` parses KAIROS, EGM (`docs/designs/*.md`), OpenSpec
-(`openspec/changes/*`) and Spec Kit (`specs/*/spec.md`) layouts. It does not
-replace them and does not claim its format is better — the benchmark found no
-meaningful difference between any of them (±10pp noise band). It adds the check
-they skip.
+Use **one** spec tool from start to finish — OpenSpec is the measured best choice
+(42/50 merged, 2.4% drift, fastest spec phase at 12 min). `kairos gate` sits
+behind it and behind EGM, Spec Kit or KAIROS layouts alike.
+
+It does not replace your spec tool and does not claim its format is better: the
+benchmark found no meaningful difference between any of them (±10pp noise band).
 
 ---
 

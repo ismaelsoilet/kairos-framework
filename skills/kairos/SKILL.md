@@ -81,15 +81,29 @@ It is the only section the gate turns into a hard block. Be specific and literal
 - `api/v1/**`
 ```
 
-### If you use Elephant-Goldfish, OpenSpec or Spec Kit
+### This is a back end, not a framework
 
-You do not need to switch. `kairos gate` parses all four layouts — KAIROS,
-EGM (`docs/designs/*.md`), OpenSpec (`openspec/changes/*`), Spec Kit
-(`specs/*/spec.md`). Section names are matched loosely.
+Do not replace your spec tool with this. Use **one** spec tool — OpenSpec is the
+measured best choice (42/50 merged, 2.4% drift, fastest spec phase) — and put
+this gate behind it.
 
-What this skill adds to those tools is the step they leave out: **checking that
-the delivered diff matches the approved spec.** EGM and Spec Kit stop at
-approval. The benchmark measured 7.9% drift after merge.
+OpenSpec already has `/opsx:verify`. Read that first. The gate adds two things it
+does not do:
+
+| | `/opsx:verify` | `kairos gate` |
+| :--- | :--- | :--- |
+| Output | a report | **exit code** (0 = READY) |
+| Blocking | advisory, "archive retains its own checks" | fails the build |
+| No-change list | not supported | blocks on it |
+| Spec completeness floor | not checked | blocks below 6/8 |
+
+Use both if you use both. If `/opsx:verify` later blocks builds and checks
+invariants, delete this gate.
+
+`kairos gate` parses KAIROS, EGM, OpenSpec and Spec Kit layouts, so whichever you
+already write is probably fine. For OpenSpec it reads `proposal.md`, `design.md`
+and the delta `spec.md` together — a delta spec alone scores 3/8, which is the
+format doing less, not the author doing worse.
 
 ---
 

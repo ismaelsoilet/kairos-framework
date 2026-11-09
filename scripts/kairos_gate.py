@@ -135,10 +135,128 @@ class Spec:
 
 
 def parse_spec(path):
+    """Parse a spec in any of the four layouts KAIROS claims to support.
+
+    OpenSpec is different enough to need its own adapter: it is organised as
+    capability deltas (`## ADDED Requirements` / `### Requirement:` /
+    `#### Scenario:`), not as an implementation plan. Mapping it onto the same
+    8-item checklist would score it 0/8 and wrongly call it weak — the format is
+    simply answering different questions.
+    """
     p = Path(path)
     if not p.is_file():
         raise FileNotFoundError(f"spec not found: {p}")
-    return Spec(p, p.read_text(encoding="utf-8", errors="replace"))
+    text = p.read_text(encoding="utf-8", errors="replace")
+    if re.search(r"^##\s+(ADDED|MODIFIED|REMOVED|RENAMED)\b", text, re.MULTILINE):
+        return OpenSpec(path, text)
+    return Spec(path, text)
+
+
+class OpenSpec(Spec):
+    """A spec in OpenSpec delta format, adapted to the same gate contract.
+
+    OpenSpec puts different things in different files:
+      proposal.md  -> why (goal) and what changes (scope)
+      specs/**.md  -> Requirement: blocks, each with Scenario: blocks
+      design.md    -> technical decisions and the files to touch
+      tasks.md     -> the implementation checklist
+
+    The gate reads whatever of those exist next to the file it was pointed at.
+    """
+
+    def __init__(self, path, text):
+        self.path = Path(path)
+        self.text = text
+        self.requirements = self._parse_requirements(text)
+        change_dir = self.path.parent
+        # Walk up to the change folder (the one holding proposal.md / tasks.md).
+        for _ in range(4):
+            if (change_dir / "proposal.md").exists() or (change_dir / "tasks.md").exists():
+                break
+            if change_dir.parent == change_dir:
+                break
+            change_dir = change_dir.parent
+        self.change_dir = change_dir
+        self.proposal = self._read(change_dir / "proposal.md")
+        self.tasks = self._read(change_dir / "tasks.md")
+        self.design = self._read(change_dir / "design.md")
+        self.sections = {"_openspec": text}
+        self.criteria = [f"{r['name']}: {r['scenario']}" if r['scenario'] else r['name']
+                         for r in self.requirements if r["op"] in ("ADDED", "MODIFIED")]
+        self.no_change = self._extract_no_change_openspec()
+        self.declared_files = self._extract_files_openspec()
+
+    @staticmethod
+    def _read(p):
+        return p.read_text(encoding="utf-8", errors="replace") if p.exists() else ""
+
+    def _parse_requirements(self, text):
+        out, op, current = [], None, None
+        for line in text.splitlines():
+            m_op = re.match(r"^##\s+(ADDED|MODIFIED|REMOVED|RENAMED)\b", line)
+            if m_op:
+                op, current = m_op.group(1), None
+                continue
+            m_req = re.match(r"^###\s*Requirement:\s*(.+)$", line, re.IGNORECASE)
+            if m_req:
+                current = {"op": op, "name": m_req.group(1).strip(), "scenario": None}
+                out.append(current)
+                continue
+            m_sc = re.match(r"^####\s*Scenario:\s*(.+)$", line, re.IGNORECASE)
+            if m_sc and current is not None and current["scenario"] is None:
+                current["scenario"] = m_sc.group(1).strip()
+        return out
+
+    def completeness(self):
+        """OpenSpec vocabulary, scored against the same eight ideas.
+
+        Goal comes from proposal "Why", scope from proposal "What changes",
+        acceptance from Scenario blocks, constraints from design, edge cases from
+        scenarios that describe failure. Items OpenSpec genuinely does not carry
+        (data changes, no-change list) count as missing and are reported, not
+        silently waved through.
+        """
+        present, missing = [], []
+        haystack = " ".join([
+            self.proposal, self.design, self.text,
+        ]).lower()
+
+        checks = {
+            "goal": bool(re.search(r"^#+\s*why\b", self.proposal, re.M | re.I))
+                    or "why" in self.proposal.lower()[:200],
+            "scope": bool(re.search(r"what changes|what's changing|scope", self.proposal, re.I)),
+            "inputs_outputs": bool(re.search(r"interface|endpoint|input|output|api|request|response", haystack)),
+            "data_changes": bool(re.search(r"schema|migration|model|database|data change", haystack)),
+            "edge_cases": bool(re.search(r"error|failure|invalid|edge case|raise|throw", haystack))
+                          or any(re.search(r"fail|error|invalid", (r["scenario"] or ""), re.I)
+                                 for r in self.requirements),
+            "acceptance_tests": any(r["scenario"] for r in self.requirements),
+            "constraints": bool(re.search(r"constraint|must not|dependenc|performance|security", haystack)),
+            "no_change_list": bool(self._extract_no_change_openspec()),
+        }
+        for name, ok in checks.items():
+            (present if ok else missing).append(name)
+        return len(present), present, missing
+
+    def _extract_no_change_openspec(self):
+        """OpenSpec has no no-change section by default. Only an explicit heading
+        is treated as one; absence means the check does not run, not that it
+        passed."""
+        out = []
+        if not self.design:
+            return out
+        m = re.search(r"^#+\s*(no[- ]change|must not change).*?$(.*?)(?=^#|\Z)",
+                      self.design, re.I | re.M | re.S)
+        if m:
+            out += [t for t in re.findall(r"`([^`]+)`", m.group(2))]
+        return sorted(set(out))
+
+    def _extract_files_openspec(self):
+        out = set()
+        for doc in (self.design, self.proposal):
+            for tok in re.findall(r"`([\w./-]+\.\w{1,6})`", doc):
+                out.add(tok)
+        return out
 
 
 # Paths that are framework bookkeeping, not delivered code. The Uvik benchmark

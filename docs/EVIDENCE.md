@@ -17,20 +17,40 @@ of ±10 percentage points computed from 10 re-run tickets. Raw data under CC BY 
 
 | Finding | Number | Consequence in KAIROS |
 | :--- | :--- | :--- |
-| Best spec arm vs control, merge rate | 84% vs 72% | modest, real, and within the noise band of each other |
-| No spec framework beat another | gaps ≤2pp, band ±10pp | **KAIROS does not claim its spec format is better than Spec Kit, Kiro, BMAD or OpenSpec** |
-| Specs covering 6+ of 8 checklist items | merged **89.3%** vs **60.0%** | the 8-section template and the 6/8 gate threshold |
+| Best spec arm vs control, merge rate | 84% vs 72% | modest, real, within noise |
+| No spec framework beat another | gaps ≤2pp, band ±10pp | **KAIROS claims no better format** |
+| OpenSpec had the lowest spec drift | **2.4%** | the lowest of all arms — see §5 |
+| OpenSpec merged the most | 42/50 | the reason §5 recommends it as the front end |
+| Specs covering 6+ of 8 checklist items | merged **89.3%** vs **60.0%** | the 8-section template and the 6/8 threshold |
 | Tickets with 3+ files | spec paid back | the fit test's primary question |
 | Bug-fix, refactor, test-writing tickets | **0pp** gain, higher cost | the fit test says NO_SPEC for these |
-| Spec phase cost | ~18 min median, 35.1% of tokens | quoted in the skill so the cost is not hidden |
-| **Merged tickets that did not match their own spec** | **7.9%** | **this is the gap KAIROS exists to close** |
+| Spec phase cost | ~18 min median, 35.1% of tokens | quoted in the skill so the cost is visible |
+| **Merged tickets that did not match their own spec** | **7.9%** | **the gap KAIROS exists to close** |
 | Review defects per merged ticket | 0.46 with spec vs 0.86 without | specs reduce defects even where merge rate does not move |
 | Median spec size | 128 lines | the "under ~130 lines" guidance |
 
-**The one thing nobody else in that benchmark does:** every framework stops at
-approval. None of them checks, after the build, that the delivered code matches
-the approved spec. The benchmark measured that drift at 7.9% and left it
-unaddressed. That check is what `kairos gate` is.
+**Correction, 2026-11-09.** An earlier version of this section said every
+framework stops at approval. That was wrong: **OpenSpec has `/opsx:verify`**,
+which checks the implementation against the change artifacts across three
+dimensions (completeness, correctness, coherence) before archive. It is the one
+framework in the benchmark that addresses post-build drift, and it does it with
+the lowest measured drift of any arm (2.4% vs 4.9–12.5% for the others).
+
+What `/opsx:verify` does not do, and why a second check still matters:
+
+- It is **advisory**. Its own skill text says "Verification is advisory" and
+  "archive retains its own checks". It produces a report; it does not fail a
+  build. A report nobody blocks on is a report that gets skimmed.
+- It verifies against **requirements and scenarios**, which is the right target,
+  but by keyword search and inference — "search codebase for keywords related to
+  the requirement".
+- It has no notion of a **no-change list**, so an unrelated file rewritten in the
+  same change is invisible to it.
+
+`kairos gate` is therefore complementary rather than novel: it adds a hard exit
+code, a declared-invariant check, and a completeness floor. OpenSpec's own
+numbers (2.4% drift, 42/50 merged, lowest cost of the spec arms at $2.71) are the
+reason §5 recommends using OpenSpec as the front end and the gate as the back.
 
 **Limits of this source, stated plainly:**
 
@@ -138,6 +158,29 @@ the report.
   Google's, above. Popularity is adoption, not efficacy.
 - **Comparisons that did not run both sides.** If another framework was not
   executed on the same tickets, KAIROS says nothing about which is better.
+
+---
+
+## 5. The recommended stack, and why each piece is there
+
+The benchmark makes one recommendation possible without any further measurement,
+because the numbers are its own:
+
+| Layer | Tool | Evidence for choosing it |
+| :--- | :--- | :--- |
+| Write and iterate the spec | **OpenSpec** | 42/50 merged (highest), 2.4% drift (lowest), $2.71 per merged ticket (second lowest), 12-minute median spec phase (fastest) |
+| Review the spec before coding | **fresh-context reviewer** | reasoning, not measurement: same-context review inherits the author's blind spots. EGM's structure, credited |
+| Decide whether to spec at all | **`kairos fit`** | 0pp gain on bug-fix/refactor/test tickets; no gain below 3 files |
+| Verify the delivery | **`kairos gate`** | hard exit code and a no-change check, which `/opsx:verify` does not provide |
+
+**One tool, not five.** OpenSpec owns the artifact lifecycle: propose, apply,
+verify, archive. KAIROS does not duplicate any of it. It adds the two decisions
+OpenSpec leaves open — *should this ticket have a spec* — and the hard failure
+OpenSpec leaves advisory — *the diff touched a file the spec said not to touch*.
+
+If OpenSpec's `/opsx:verify` later gains a blocking mode and an invariant check,
+the gate becomes redundant and should be deleted. That is the honest condition
+for its existence.
 
 ---
 

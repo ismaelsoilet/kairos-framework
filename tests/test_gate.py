@@ -234,6 +234,76 @@ class TestRegressions(unittest.TestCase):
         self.assertNotIn("fraud:assert_deletion", [f["rule"] for f in result["findings"]])
 
 
+class TestOpenSpecAdapter(unittest.TestCase):
+    """Regression: the README claimed OpenSpec support before it existed.
+    A raw delta spec scored 0/8, which would have called every OpenSpec change
+    'too weak' — the format answers different questions, not fewer."""
+
+    def _make_change(self, tmp, with_design=True):
+        root = Path(tmp) / "openspec" / "changes" / "add-dark-mode"
+        (root / "specs" / "ui").mkdir(parents=True)
+        (root / "proposal.md").write_text(
+            "## Why\nUsers want dark mode.\n\n"
+            "## What Changes\n- Add a theme toggle\n- Persist the choice\n", encoding="utf-8")
+        (root / "tasks.md").write_text("## 1. Implementation\n- [ ] 1.1 Add provider\n", encoding="utf-8")
+        spec = root / "specs" / "ui" / "spec.md"
+        spec.write_text(
+            "## ADDED Requirements\n\n"
+            "### Requirement: Theme selection\n"
+            "The app SHALL let users switch themes.\n\n"
+            "#### Scenario: User toggles dark mode\n"
+            "- **WHEN** the user clicks the toggle\n"
+            "- **THEN** the app switches to dark mode\n", encoding="utf-8")
+        if with_design:
+            (root / "design.md").write_text(
+                "# Design\n\n## Interfaces\n`useTheme()` returns `{theme, toggle}`.\n\n"
+                "## Edge cases\n- localStorage unavailable: fall back to memory\n"
+                "- invalid stored value: ignore\n\n"
+                "## Constraints\nNo new dependency. Must not change the palette.\n\n"
+                "## Files\n- `src/theme.tsx`\n- `tests/theme.test.tsx`\n", encoding="utf-8")
+        return spec
+
+    def test_delta_spec_is_parsed_as_openspec_not_generic(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            spec = self._make_change(tmp)
+            from kairos_gate import parse_spec, OpenSpec
+            parsed = parse_spec(spec)
+            self.assertIsInstance(parsed, OpenSpec)
+            self.assertEqual(len(parsed.requirements), 1)
+            self.assertEqual(parsed.requirements[0]["op"], "ADDED")
+            self.assertEqual(parsed.requirements[0]["scenario"], "User toggles dark mode")
+
+    def test_scenario_becomes_an_acceptance_criterion(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            spec = self._make_change(tmp)
+            from kairos_gate import parse_spec
+            parsed = parse_spec(spec)
+            self.assertTrue(any("dark mode" in c.lower() for c in parsed.criteria))
+
+    def test_full_openspec_change_meets_the_threshold(self):
+        """With design.md — which OpenSpec recommends — the change scores 6/8.
+        The gate was never meant to demand a format OpenSpec does not use."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            spec = self._make_change(tmp)
+            from kairos_gate import parse_spec, COMPLETENESS_THRESHOLD
+            parsed = parse_spec(spec)
+            score, present, missing = parsed.completeness()
+            self.assertGreaterEqual(score, COMPLETENESS_THRESHOLD,
+                                    f"scored {score}/8, missing {missing}")
+
+    def test_delta_only_change_is_flagged_weak(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            spec = self._make_change(tmp, with_design=False)
+            from kairos_gate import parse_spec, COMPLETENESS_THRESHOLD
+            parsed = parse_spec(spec)
+            score, _, _ = parsed.completeness()
+            self.assertLess(score, COMPLETENESS_THRESHOLD)
+
+
 class TestDiffStats(unittest.TestCase):
     def test_counts_files_and_lines(self):
         st = diff_stats(CLEAN_DIFF)
