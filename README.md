@@ -1,258 +1,227 @@
 # KAIROS (καιρός)
-### Autonomous Agentic SDLC, Token Governance & Anti-Fraud Framework
 
-> **"The exact measure, at the opportune moment, without token waste or tolerance for fraud."**
+### A process-governance layer for coding agents — specs, TDD, mutation testing, and diff auditing
+
+> **"The exact measure, at the opportune moment."**
+>
+> On the name: *kairos* is the Greek word for the right moment, as opposed to *chronos*, mere elapsed time. The project earned the name badly for its first year. See below.
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Python: 3.10+](https://img.shields.io/badge/Python-3.10%2B-green.svg)](https://python.org)
-[![Version: 1.1.0](https://img.shields.io/badge/Version-1.1.0-blueviolet.svg)](plugin.json)
-[![Audit Verdict: VERIFIED](https://img.shields.io/badge/Audit%20Verdict-VERIFIED%20(Zero--Trust)-success.svg)](docs/EMPIRICAL_BENCHMARK_REPORT.md)
-[![Gemini 3.8 Flash Savings: 19.3%](https://img.shields.io/badge/Gemini%203.8%20Hardware%20Savings-19.3%25-brightgreen.svg)](docs/EMPIRICAL_BENCHMARK_REPORT.md)
+[![Version: 1.2.0](https://img.shields.io/badge/Version-1.2.0-blueviolet.svg)](plugin.json)
 
 ---
 
-## 📖 Languages
-* **English:** `README.md` (Current file)
-* **Português (Brasil):** [`README.pt-br.md`](README.pt-br.md)
+> ## ⚠️ Retraction notice (2026-11-08)
+>
+> Versions up to v1.1.0 published token-savings percentages, success rates and "empirical benchmark" results on this page. **Those numbers were not measured.** They were constants written into the benchmark scripts and printed as if they were observations.
+>
+> **All of them are withdrawn.** Read [`RETRACTION.md`](RETRACTION.md) for the full list, the mechanism behind each one, and what was actually true.
+>
+> This README no longer contains a quantitative performance claim, because none currently meets the evidence bar this project sets for others. Claims may return when they carry a reproducible artifact — see [`CLAIMS.md`](CLAIMS.md).
+
+**Languages:** English (this file) · [Português (Brasil)](README.pt-br.md)
 
 ---
 
-## ⚡ Real-Time Telemetry & Token Tracking
+## What KAIROS is
 
-KAIROS mandates that every milestone turn or agent response display real-time telemetry so that developers and agents always know their **exact operational stage** and **token budget remaining**:
+KAIROS is a set of conventions plus a zero-dependency Python CLI that impose a disciplined process on an AI coding agent:
+
+- classify the task's risk before doing work
+- write a delta spec before writing code
+- implement inside an isolated `git worktree`
+- write the failing test first
+- mutate the implementation and confirm the tests catch it
+- scan the resulting `git diff` for signs that the agent cheated
+- archive the spec and record the lesson
+
+It does not generate code. It does not call a model. It has no opinion about which model you use. It is the part that refuses to take the agent's word for it.
+
+Everything below is either implemented in `scripts/kairos_cli.py` or marked as not implemented. That distinction is the point of v1.2.
+
+---
+
+## Capability status
+
+Honest tiering. If a capability is in the third column, do not plan around it.
+
+### Implemented and covered by tests
+
+| Capability | Command | Test evidence |
+| :--- | :--- | :--- |
+| Project state, atomic writes, reentrant lock | `init`, `status` | `atomic_state_save`, `state_file_locking_context_manager` |
+| Risk classification (keyword-based) | `dial` | `dial_security_and_financial_prioritization` |
+| Delta spec scaffolding (5 files) | `spec` | `spec_name_sanitization_rejects_path_traversal` |
+| Diff fraud scanning | `audit` | 15 positive/negative scanner tests |
+| Manifest reconnaissance | `scout` | `scout_detects_cutoff_risk_packages`, `scout_cli_execution` |
+| Skill/agent discovery | `registry` | `registry_discovers_agents_and_skills` |
+| In-repo lessons | `lesson add/list` | `lesson_add_and_list` |
+
+### Implemented, untested
+
+`worktree create/remove/list`, `archive`, `export`, `rollback`, the `mutate` engine end-to-end (only its operator table is asserted), and `status --dashboard` rendering. Listed here deliberately: a command exiting 0 is not evidence that it works.
+
+### Documented, not implemented
+
+- **`kairos drift`** — referenced by `skills/kairos-sync/SKILL.md` and `docs/AGENT_LESSONS.md`. The subcommand does not exist. Removed from the docs in v1.2 pending implementation or removal.
+- **Blast-radius enforcement** — `docs/ARCHITECTURE.md` claimed the scanner compares touched files against paths declared in `tasks.md`. It does not. Scope creep is a review responsibility, not a scanner feature, until implemented.
+- **`invoke_subagent(...)`** — appears as code in two skills. It is a harness primitive, not provided by this repository. Skills now say so explicitly.
+
+---
+
+## The five iron laws
+
+From [`rules/kairos-core.md`](rules/kairos-core.md):
+
+1. **No production code without a failing test.** If you did not watch it fail, you do not know what it tests.
+2. **No guesswork in debugging.** Reproduce the defect in a minimal test before touching production code.
+3. **Ground truth is `git diff`.** Claims are not evidence. Command output and diff inspection are.
+4. **Hunt the six classic frauds** — weakened checks, false completion, scope creep, unauthorized action, spec betrayal, debris.
+5. **Living specifications.** Finished work archives its spec into `.kairos/specs/`.
+
+Law 3 is the one this project violated most thoroughly, and the reason for the retraction above.
+
+---
+
+## The Elastic Dial
+
+Three process depths, chosen by the classifier in `dial`:
+
+| Mode | Intended for | Pipeline | Subagents | Budget target |
+| :--- | :--- | :--- | :--- | :--- |
+| **Alpha** | UI, copy, layout, CSS, small edits | in-turn micro-delta, surgical edit, diff sanity check | 0 | small |
+| **Beta** | new endpoint, logic change, bugfix | manifest recon → delta spec → worktree → strict TDD → diff scan | 1 | medium |
+| **Gamma** | auth, payments, migrations, core logic | recon → spec + zero-context critic → worktree → TDD → mutation testing → adversarial audit | up to 3 | large |
+
+**Known limitation, stated plainly:** classification is keyword matching over the task description (`ALPHA_KEYWORDS` / `GAMMA_KEYWORDS` in `kairos_cli.py`). It has no knowledge of which files you will touch, how large the diff is, or whether the area is covered by tests. Consequences:
+
+- A CSS fix that mentions "balance" classifies as **Gamma**.
+- `--force-beta` does not override a Gamma keyword (fix in progress).
+- The budget figures are planning targets, not measurements. KAIROS does not measure your token consumption. See "Telemetry".
+
+A risk router based on objective signals — changed paths, diff size, test coverage of the area, incident history — is the honest version of this idea and is not built yet. See [`docs/OPPORTUNITIES.md`](docs/OPPORTUNITIES.md).
+
+---
+
+## The four personas
+
+| Agent | Role | What it actually does |
+| :--- | :--- | :--- |
+| `kairos_scout` | Technology Scout | Reads dependency manifests and flags packages with a history of breaking API changes. Nothing more. |
+| `kairos_critic` | Goldfish Critic | Reviews a spec with no conversation context, so it cannot be talked into agreeing. |
+| `kairos_worker` | Surgical Implementer | TDD inside a worktree; touches only declared files. |
+| `kairos_auditor` | Diff Auditor | Re-runs commands, inspects the diff, reports evidence. Its verdict is only as good as the scanner — read the limitations below before trusting it. |
+
+---
+
+## What the scanner actually catches
+
+`scan_diff_text()` runs regular expressions over added lines of a `git diff`. It reliably catches **literal** forms of:
+
+- skipped, focused or commented-out tests (`test.skip`, `xit`, `@pytest.mark.skip`, `// assert ...`)
+- empty or swallowed exception handlers (`except: pass`, `catch (e) {}`)
+- stubs returning trivial constants (`def f(): pass`, `return null;`)
+- tautological assertions (`assert True`, `assert 1 == 1`, `expect(true).toBeTruthy()`)
+- net assertion or test-function deletion
+- deprecated model identifiers in code
+
+It **does not** catch, as of v1.2:
+
+- an assertion weakened in place (`assert x == 'valid'` → `assert x is not None`)
+- a handler that logs the error and then returns success
+- a mock substituted for the unit under test
+- a validation function that unconditionally returns `True`
+- a removed guard clause
+
+An independent probe of eight fraud patterns detected three. The corpus under `tests/fixtures/fraud_corpus/` exists to make that number measurable and to raise it; the current measured recall and precision are in [`CLAIMS.md`](CLAIMS.md) — whatever the corpus run reports, not a target restated as a result.
+
+**The scanner no longer excludes its own source file from auditing.** Through v1.1.0 it did (`if current_file.endswith("kairos_cli.py"): continue`), which meant the tool could not audit the tool. That exclusion is gone.
+
+---
+
+## Telemetry: what it measures and what it does not
+
+The status line looks like this:
 
 ```text
-⚡ [KAIROS | Stage: <STAGE> | Mode: <MODE> | Tokens: <CONSUMED>/<CAP> tok | Left: <REMAINING>]
+⚡ [KAIROS | Stage: BUILDING | Mode: BETA | Budget: 65,000 | Spent: UNMEASURED]
 ```
 
-### Supported Lifecycle Stages (9-Stage Real-Time Pipeline):
-1. `IDLE`: No task currently running.
-2. `CLASSIFIED`: Task complexity analyzed and token budget allocated by the Elastic Dial.
-3. `RESEARCHING`: Pre-Brainstorming Reconnaissance (`kairos scout` / `kairos_scout`) inspecting dependency manifests and modern native primitives.
-4. `BRAINSTORMING`: Informed architectural ideation leveraging native framework features (Rule of Minimal Surface).
-5. `SPECIFYING`: Delta Spec and contract drafting in progress (`.kairos/changes/`).
-6. `BUILDING`: Isolated Git Worktree created; TDD Red-Green-Refactor loop active.
-7. `AUDITING`: Adversarial Zero-Trust audit hunting the 6+ classic frauds and mutation testing.
-8. `VERIFIED`: Diff verified clean with conclusive evidence and 0% regressions.
-9. `SHIPPED`: Living specs archived to `.kairos/specs/`, worktree cleaned, and lessons recorded.
+`Stage` and `Mode` come from `.kairos/state.json`. `Budget` is a planning target.
 
-Check live status and visual dashboard at any time via CLI:
-```bash
-python3 scripts/kairos_cli.py status --dashboard
-# Or compact header only:
-python3 scripts/kairos_cli.py status --header-only
-```
+`Spent` is **`UNMEASURED`** until you import real usage data with `kairos token import --usage <log.jsonl>`, which parses actual input/output/cache token counts and cost from a harness log and records the source file hash alongside them. Through v1.1.0 the field was filled by `kairos token add <n>` — the agent incrementing its own counter, which is the exact failure mode this project claims to detect. That command is removed.
+
+If nothing is measured, the status says so. It does not print zero and let you infer that zero tokens were spent.
 
 ---
 
-## 🎯 What KAIROS DOES and What It DOES NOT DO
+## Install and first run
 
-To ensure absolute engineering clarity, KAIROS maintains unambiguous boundaries:
-
-### ✅ What KAIROS DOES:
-1. **Governs Agent Cognition:** Eliminates sycophancy (LLMs blindly agreeing with flawed user ideas) by deploying zero-context subagent critics (`kairos_critic`) that stress-test specifications.
-2. **Eliminates Token Bloat (Elastic Dial):** Dynamically scales engineering depth between Mode Alpha (Lite/UI), Mode Beta (Standard), and Mode Gamma (Critical), saving up to **85% of tokens** on small visual adjustments.
-3. **Combats Knowledge Cutoff & Hallucinations (`kairos_scout`):** Inspects actual project manifests (`package.json`, `pyproject.toml`, `pubspec.yaml`, `Cargo.toml`, `go.mod`) to detect version shifts and ensure modern APIs are used instead of stale training memory.
-4. **Enforces Research-First Brainstorming:** Eliminates the reinvention of the wheel by discovering modern native framework primitives (e.g. Colyseus 0.15+, Next 15, Pydantic v2) *before* architecture ideation begins.
-5. **Isolates Workspaces:** Enforces the use of `git worktree` so the agent can never break or pollute the primary branch during development.
-6. **Enforces Strict TDD:** Forbids production code generation without observing a failing test first (*no test = no code*).
-7. **Hunts LLM Coding Frauds:** Algorithmic and adversarial inspection of `git diff` catching weakened assertions, commented-out tests, multiline empty `try/catch` handlers, unfinished function stubs, and tautological assert laundering (`assert True`).
-8. **Validates Test Strength with Mutation Testing (K-Mutant):** Proves that tests are real and not tautological illusions by mutating logical operators and confirming test failure.
-9. **Maintains Living Specifications & In-Repo Learning:** Transforms delta changes (`.kairos/changes/`) into persistent architectural contracts (`.kairos/specs/`) and captures lessons in `.kairos/lessons.md`.
-10. **Native Extensibility & Self-Updating:** Seamlessly updates from upstream (`kairos update`) and dynamically discovers pluggable agents and skills (`kairos registry`).
-
-### ❌ What KAIROS DOES NOT DO:
-1. **It is NOT a Foundation Model:** KAIROS does not generate tokens on its own; it is a governance and orchestration engine that disciplines Frontier Reasoning and Coding Models (e.g., Gemini 4 Argon, Gemini 3.8 Flash, Claude Sonnet 4.5/5.5, GPT-6 Astra, GPT-6.1 Sol, o4-mini).
-2. **It Does NOT Guess Product Vision:** KAIROS will not invent business rules or make strategic product decisions. It forces human approval at specification gates.
-3. **It is NOT a Generic Static Linter:** It does not replace SonarQube or ESLint. KAIROS specializes in **behavioral integrity, intent compliance, and AI-induced hallucinations/frauds**.
-4. **It Does NOT Accept Verbal Claims:** Phrases like *"all tests pass"* or *"implementation complete"* have zero value without real bash stdout evidence and clean diff inspection.
-5. **It Does NOT Perform Destructive Actions Silently:** It will never push to remote branches, deploy to production, or drop database tables without explicit user authorization.
-
----
-
-## 🧠 The Elastic Dial (Token Economics)
-
-Traditional agentic frameworks suffer from the **Monolithic Fallacy**: forcing every single task (even fixing a button margin) through a 20-minute, 200k-token pipeline. KAIROS resolves this with the **Elastic Dial**:
-
-```mermaid
-flowchart TD
-    IN["Developer Task / Prompt"] --> DIAL{"KAIROS Elastic Dial"}
-
-    DIAL -- "Low Risk (UI, CSS, typo, layout, <30 LOC)" --> A["MODE ALPHA (Lite / UI)<br/>• Zero external subagents<br/>• In-turn 3-point micro-delta<br/>• Direct surgical edit + a11y diff check<br/><b>Budget: ~5k - 15k tokens (85% savings)</b>"]
-    
-    DIAL -- "Medium Risk (New endpoint, logic, bugfix)" --> B["MODE BETA (Standard)<br/>• Manifest recon (kairos scout)<br/>• Delta Spec (.kairos/changes/)<br/>• Isolated Git Worktree<br/>• Strict TDD (Red -> Green -> Refactor)<br/>• Automated diff fraud scan<br/><b>Budget: ~30k - 65k tokens (60% savings)</b>"]
-    
-    DIAL -- "High Risk (Auth, payments, DB migrations, core)" --> C["MODE GAMMA (Critical / Enterprise)<br/>• Pre-Brainstorming Recon (kairos_scout)<br/>• Comprehensive Spec + Goldfish Critic (kairos_critic)<br/>• Worktree + Implementer & Auditor Subagents<br/>• K-Mutant Mutation Testing + Zero-Trust Audit<br/>• Formal Evidence Audit Table<br/><b>Budget: ~120k - 200k tokens (Max Guarantee)</b>"]
-```
-
----
-
-## 🤖 The 4 Canonical Personas
-
-KAIROS coordinates 4 specialized, decoupled agent personas:
-
-| Agent Persona | Role | Mandate & Operating Doctrine |
-| :--- | :--- | :--- |
-| **`kairos_scout`** | Technology Scout & Research Scientist | Scans manifests (`package.json`, `pyproject.toml`), checks live documentation, and uncovers modern native framework primitives *before* brainstorming to prevent reinventing solved problems. |
-| **`kairos_critic`** | The Goldfish Critic | Senior architect spawned with **zero prior conversation context** to review specs objectively without sycophancy or conversational bias. |
-| **`kairos_worker`** | The Surgical Implementer | TDD practitioner executing inside isolated `git worktrees`. Strictly follows Karpathy principles: touches only declared files and writes minimal code. |
-| **`kairos_auditor`** | Zero-Trust Adversarial Auditor | Independent quality auditor hunting the 6+ classic LLM frauds in git diffs, delivering formal evidence-based verdicts (`VERIFIED` or `REFUTED`). |
-
----
-
-## 🔬 Anti-Vaporware Laboratory: The K-Bench Protocol
-
-To prove that KAIROS actually works and is not merely "prompt theater", we created **K-Bench**—an automated evaluation harness that runs 4 stress challenges across 3 competing methodologies:
+Requires Python 3.10+. No dependencies.
 
 ```bash
-python3 benchmark/runner.py --test-detector --run
+git clone https://github.com/ismaelsoilet/kairos-framework
+cd your-project
+python3 /path/to/kairos-framework/scripts/kairos_cli.py init
+python3 /path/to/kairos-framework/scripts/kairos_cli.py dial "add retry to the payment webhook"
 ```
 
-### Empirical Scorecard Results:
-
-```
-==========================================================================
-📊 K-BENCH COMPARATIVE SCORECARD
-==========================================================================
-Scenario               | Vibe Coding      | Heavy Monolith   | KAIROS (Elastic)
-----------------------------------------------------------------------------
-K-01: The Concurrency  | 12k tok | 20% ok | 160k tok | 95% ok | 140k tok | 98% ok
-K-02: Brownfield UI L  | 9k tok | 70% ok  | 120k tok | 95% ok | 12k tok | 95% ok
-K-03: Backward-Compat  | 18k tok | 50% ok | 140k tok | 90% ok | 55k tok | 95% ok
-K-04: Adversarial Pre  | 10k tok | 50% ok | 150k tok | 90% ok | 45k tok | 95% ok
-----------------------------------------------------------------------------
-TOTAL TOKENS BURNED    | 49k tokens       | 570k tokens      | 252k tokens
-KAIROS TOKEN SAVINGS   | --               | Base (0%)        | 55% Total Savings!
-FRAUD ESCAPE RATE      | ~46.7% leaked    | ~3.8% leaked     | 0.0% (Zero Trust)
-==========================================================================
-🎯 Synthetic Fraud Detection Score: 3/3 (100% of injected frauds caught)
-```
-
-**Key Empirical Findings:**
-* **Vibe Coding** consumes fewer tokens upfront, but leaks critical bugs and weakened tests **46.7% of the time**.
-* **Heavy Monoliths** guarantee safety, but waste **570,000+ tokens** on routine tasks.
-* **KAIROS** achieves the highest success rate (95-98%) with **0% fraud leakage** while saving **55% to 85% of tokens**.
-
----
-
-## 🛠️ CLI Complete Reference
-
-The KAIROS CLI is written in pure, zero-dependency Python 3:
+### Command reference
 
 ```bash
-# 1. Initialize KAIROS in your repository
-python3 scripts/kairos_cli.py init
-
-# 2. Check task complexity and set token budget (Elastic Dial)
-python3 scripts/kairos_cli.py dial "Add Colyseus room reconnection handler"
-
-# 3. Pre-Brainstorming Reconnaissance (Combat Knowledge Cutoff)
-python3 scripts/kairos_cli.py scout
-python3 scripts/kairos_cli.py scout --all
-python3 scripts/kairos_cli.py scout --save-spec
-
-# 4. Create a Delta Spec
-python3 scripts/kairos_cli.py spec add_room_reconnection
-
-# 5. Create an isolated Git Worktree
-python3 scripts/kairos_cli.py worktree create add_room_reconnection
-
-# 6. Check real-time stage and token telemetry
-python3 scripts/kairos_cli.py status
-python3 scripts/kairos_cli.py status --dashboard
-
-# 7. Run K-Mutant Mutation Testing on target file
-python3 scripts/kairos_cli.py mutate src/room.py --test "pytest tests/test_room.py"
-
-# 8. Run Zero-Trust Adversarial Audit on git diff
-python3 scripts/kairos_cli.py audit --base main
-
-# 9. In-Repo Continuous Learning (Lessons Learned)
-python3 scripts/kairos_cli.py lesson add --title "Colyseus Reconnect" --rule "Use native allowReconnection"
-python3 scripts/kairos_cli.py lesson list
-
-# 10. Self-Update Engine & Extension Registry
-python3 scripts/kairos_cli.py update
-python3 scripts/kairos_cli.py registry
-
-# 11. Promote spec to living documentation and clean up
-python3 scripts/kairos_cli.py archive add_room_reconnection
-python3 scripts/kairos_cli.py worktree remove add_room_reconnection
+kairos init                                     # create .kairos/ and state.json
+kairos dial "<task>" [--force-alpha|--force-beta|--force-gamma]
+kairos scout [--all] [--save-spec]              # manifest reconnaissance
+kairos spec <name>                              # 5-file delta spec
+kairos worktree create|remove|list <name>
+kairos mutate <file> --test "<cmd>" [--max-mutants N] [--timeout S]
+kairos audit --base main [--worktree PATH|--root-only]
+kairos archive <change_id>
+kairos rollback [--worktree PATH|--root-only]
+kairos status [--dashboard|--header-only]
+kairos token import --usage <log.jsonl>
+kairos lesson add|list
+kairos registry
+kairos export <claude|cursor|agents|universal|all>
+kairos update [--skip-self-test]
 ```
 
 ---
 
-## 🌐 Multi-Harness Universal Export
-
-Export KAIROS directives, rules, and schemas to any environment with a single command:
-
-```bash
-python3 scripts/kairos_cli.py export all
-```
-* **Claude Code:** Creates `CLAUDE.md` and `.claude/`.
-* **Cursor IDE:** Creates `.cursorrules` and `.cursor/rules/`.
-* **Universal Agents (Windsurf / Gemini CLI / OpenAI / Roo Code):** Creates `AGENTS.md`.
-
----
-
-## 🔬 Empirical Benchmark & Hardware Token Verification (v1.1.0)
-
-In November 2026, KAIROS underwent a rigorous, peer-reviewed empirical benchmark comparing **Vibe Coding** against **KAIROS SDLC (Mode GAMMA)** on two identical live SaaS deployments, followed by real subagent execution under **Google Gemini 3.8 Flash (High)**:
-
-* 📊 **100% Zero-Defect First Pass:** Under 60 concurrent threads, Vibe Coding failed in production with overdraft (-R$ 100). KAIROS with `AsyncMutex` allocated exactly 10 and rejected 40 with HTTP 409 (0 race conditions).
-* 💰 **19.3% Net Hardware Token Savings:** Vibe Coding required a costly repair cycle after breaking in production (61.5k gen + 50.7k repair = 112.3k total tokens). KAIROS delivered zero-defect code on the first pass (90.6k tokens), achieving **21,643 active tokens saved** and **33.15% savings with cache read**.
-* 🛡️ **Zero-Trust Independent Audit (`[ ✅ VERIFIED ]`):** An independent adversarial auditor running Command Code (DeepSeek v4.1 Flash) physically reproduced all 6 empirical criteria on local ports 5051 and 5052 without trusting self-reported claims.
-
-👉 Read the full peer-reviewed audit: **[Empirical Benchmark & Hardware Token Report](docs/EMPIRICAL_BENCHMARK_REPORT.md)**.
-
----
-
-## 📚 Architectural Guides & Documentation Hub
-
-Explore our deep technical guides in the [`docs/`](docs/) directory:
-
-* 🔬 **[Anti-Cutoff & Tech Scout Guide](docs/TECH_SCOUT_E_RESEARCH.md):** How `kairos_scout` stops outdated API hallucinations.
-* 🧠 **[Research-First Brainstorming](docs/RESEARCH_FIRST_BRAINSTORMING.md):** The Colyseus / Omnistage Engine case study and the Rule of Minimal Surface.
-* 🧬 **[Continuous Evolution & Upstream Ingestion](docs/EVOLUCAO_E_UPSTREAM_FRAMEWORKS.md):** How KAIROS updates itself from OpenSpec, EGM, Superpowers, and Fable.
-* 🔄 **[Ecosystem & Pluggable Registry](docs/ECOSSISTEMA_E_AUTO_ATUALIZACAO.md):** Extending KAIROS with custom agents, skills, and MCP tools.
-* 🛡️ **[Adversarial Red Team Report](docs/ADVERSARIAL_RED_TEAM_REPORT.md):** 18 critical vulnerabilities tested, patched, and verified.
-* 📜 **[The 10 Agent Lessons](docs/AGENT_LESSONS.md):** Behavioral heuristics for autonomous coding agents.
-* 🏛️ **[System Architecture](docs/ARCHITECTURE.md) & [General Topography](docs/ARQUITETURA_GERAL.md):** Complete technical blueprints.
-
----
-
-## 📁 Repository Structure
+## Repository layout
 
 ```text
 kairos-framework/
-├── plugin.json                 # Antigravity plugin manifest
-├── README.md                   # English Master Documentation
-├── README.pt-br.md             # Portuguese Master Documentation
-├── rules/
-│   └── kairos-core.md          # Core directives, dial rules & iron laws
-├── agents/
-│   ├── kairos_scout.md         # The Technology Scout & Research Scientist
-│   ├── kairos_critic.md        # The Goldfish Critic (zero-context spec reviewer)
-│   ├── kairos_worker.md        # The Surgical Implementer (strict TDD & Karpathy)
-│   └── kairos_auditor.md       # The Zero-Trust Adversarial Auditor
-├── skills/
-│   ├── kairos-orchestrator/    # Supreme entrypoint (/kairos)
-│   ├── kairos-dial/            # Elastic Classifier (/kairos:dial)
-│   ├── kairos-research/        # Anti-Cutoff & Tech Scout (/kairos:scout)
-│   ├── kairos-spec/            # Delta Specs & Contracts (/kairos:spec)
-│   ├── kairos-build/           # Isolated Worktrees & TDD (/kairos:build)
-│   ├── kairos-judge/           # Adversarial Diff Audit (/kairos:audit)
-│   └── kairos-sync/            # Living Specs & Drift (/kairos:ship)
-├── docs/                       # 12+ Comprehensive Technical & Architecture Guides
-├── scripts/
-│   └── kairos_cli.py           # Zero-dependency operations CLI
-└── benchmark/
-    └── runner.py               # K-Bench automated evaluation suite
+├── RETRACTION.md              # what was claimed, why it was wrong
+├── CLAIMS.md                  # every surviving quantitative claim + artifact
+├── rules/kairos-core.md       # directives and the five iron laws
+├── agents/                    # scout, critic, worker, auditor personas
+├── skills/                    # 7 protocol skills (dial, spec, build, judge, …)
+├── scripts/kairos_cli.py      # the zero-dependency CLI
+├── tests/
+│   └── fixtures/fraud_corpus/ # labelled diffs (fraud vs clean) + expected verdicts
+├── benchmark/
+│   ├── PREREGISTRATION.md     # written before data collection
+│   └── case_study_gemini_n1/  # one real run, relabelled as a case study
+└── docs/                      # architecture, lessons, opportunities
 ```
 
 ---
 
-## ⚖️ License
+## Documentation
 
-Licensed under the [Apache License, Version 2.0](LICENSE).  
-Built with discipline by **Ismael Soilet & DeepMind AI Pair**.
+- [`RETRACTION.md`](RETRACTION.md) — the withdrawn claims and the mechanism behind each.
+- [`CLAIMS.md`](CLAIMS.md) — the ledger. Every number in this repo needs a row.
+- [`docs/OPPORTUNITIES.md`](docs/OPPORTUNITIES.md) — what parts of this are worth building for other people, and what is not.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — how the pieces fit.
+- [`docs/AGENT_LESSONS.md`](docs/AGENT_LESSONS.md) — behavioral heuristics, no performance claims.
+- [`docs/case-studies/GEMINI_N1.md`](docs/case-studies/GEMINI_N1.md) — one run, both arms, including the design flaw.
+
+---
+
+## License
+
+Apache License 2.0 — see [`LICENSE`](LICENSE).
+
+Built by Ismael Soilet, with AI assistance. The AI assistance wrote some of the claims that had to be retracted; the retraction was written with the same tooling and checked against observed output.

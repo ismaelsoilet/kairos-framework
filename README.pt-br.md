@@ -1,258 +1,227 @@
 # KAIROS (καιρός)
-### Framework Autônomo de Engenharia Agêntica, Governança de Tokens e Anti-Fraude
 
-> **"A medida exata, no momento oportuno, sem desperdício de tokens nem tolerância a fraudes."**
+### Uma camada de governança de processo para agentes de código — specs, TDD, mutation testing e auditoria de diff
+
+> **"A medida exata, no momento oportuno."**
+>
+> Sobre o nome: *kairos* é a palavra grega para o momento certo, em oposição a *chronos*, mero tempo decorrido. O projeto honrou mal esse nome no primeiro ano. Veja abaixo.
 
 [![Licença: Apache-2.0](https://img.shields.io/badge/Licen%C3%A7a-Apache%202.0-blue.svg)](LICENSE)
 [![Python: 3.10+](https://img.shields.io/badge/Python-3.10%2B-green.svg)](https://python.org)
-[![Versão: 1.1.0](https://img.shields.io/badge/Vers%C3%A3o-1.1.0-blueviolet.svg)](plugin.json)
-[![Veredito do Audit: VERIFIED](https://img.shields.io/badge/Veredito%20Audit-VERIFIED%20(Zero--Trust)-success.svg)](docs/EMPIRICAL_BENCHMARK_REPORT.md)
-[![Economia Gemini 3.8: 19.3%](https://img.shields.io/badge/Economia%20Gemini%203.8%20Hardware-19.3%25-brightgreen.svg)](docs/EMPIRICAL_BENCHMARK_REPORT.md)
+[![Versão: 1.2.0](https://img.shields.io/badge/Vers%C3%A3o-1.2.0-blueviolet.svg)](plugin.json)
 
 ---
 
-## 📖 Idiomas
-* **Português (Brasil):** `README.pt-br.md` (Arquivo atual)
-* **English:** [`README.md`](README.md)
+> ## ⚠️ Nota de retratação (2026-11-08)
+>
+> As versões até a v1.1.0 publicaram percentuais de economia de tokens, taxas de sucesso e resultados de "benchmark empírico" nesta página. **Aqueles números não eram medidos.** Eram constantes escritas dentro dos scripts de benchmark e impressas como se fossem observações.
+>
+> **Todos estão retirados.** Leia [`RETRACTION.md`](RETRACTION.md) para a lista completa, o mecanismo por trás de cada um e o que era de fato verdadeiro.
+>
+> Este README não contém mais nenhuma alegação quantitativa de desempenho, porque nenhuma atualmente atende ao padrão de evidência que o projeto exige de terceiros. Alegações podem voltar quando carregarem um artefato reproduzível — ver [`CLAIMS.md`](CLAIMS.md).
+
+**Idiomas:** Português (Brasil, este arquivo) · [English](README.md)
 
 ---
 
-## ⚡ Telemetria em Tempo Real e Rastreamento de Tokens
+## O que o KAIROS é
 
-O KAIROS exige que cada turno ou marco de desenvolvimento apresente um cabeçalho de telemetria em tempo real, permitindo que desenvolvedor e agente saibam **exatamente em qual etapa o processo está** e **quanto resta do orçamento de tokens**:
+O KAIROS é um conjunto de convenções mais uma CLI em Python sem dependências que impõe um processo disciplinado a um agente de código:
+
+- classificar o risco da tarefa antes de trabalhar
+- escrever uma delta spec antes de escrever código
+- implementar dentro de um `git worktree` isolado
+- escrever o teste que falha primeiro
+- mutar a implementação e confirmar que os testes a capturam
+- varrer o `git diff` resultante em busca de sinais de que o agente trapaceou
+- arquivar a spec e registrar a lição
+
+Ele não gera código. Não chama modelo. Não tem opinião sobre qual modelo você usa. É a parte que se recusa a aceitar a palavra do agente.
+
+Tudo abaixo está implementado em `scripts/kairos_cli.py` ou marcado como não implementado. Essa distinção é o ponto da v1.2.
+
+---
+
+## Status das capacidades
+
+Camadas honestas. Se a capacidade está na terceira coluna, não planeje em cima dela.
+
+### Implementado e coberto por testes
+
+| Capacidade | Comando | Evidência de teste |
+| :--- | :--- | :--- |
+| Estado do projeto, escrita atômica, lock reentrante | `init`, `status` | `atomic_state_save`, `state_file_locking_context_manager` |
+| Classificação de risco (por palavra-chave) | `dial` | `dial_security_and_financial_prioritization` |
+| Scaffold de delta spec (5 arquivos) | `spec` | `spec_name_sanitization_rejects_path_traversal` |
+| Varredura de fraude no diff | `audit` | 15 testes de scanner (positivos e negativos) |
+| Reconhecimento de manifestos | `scout` | `scout_detects_cutoff_risk_packages`, `scout_cli_execution` |
+| Descoberta de skills e agentes | `registry` | `registry_discovers_agents_and_skills` |
+| Lições no repositório | `lesson add/list` | `lesson_add_and_list` |
+
+### Implementado, sem teste
+
+`worktree create/remove/list`, `archive`, `export`, `rollback`, o motor `mutate` de ponta a ponta (só a tabela de operadores é verificada) e a renderização de `status --dashboard`. Listados aqui de propósito: um comando sair com código 0 não é evidência de que funciona.
+
+### Documentado, não implementado
+
+- **`kairos drift`** — citado por `skills/kairos-sync/SKILL.md` e `docs/AGENT_LESSONS.md`. O subcomando não existe. Removido da documentação na v1.2 até ser implementado ou removido de vez.
+- **Aplicação de blast radius** — `docs/ARCHITECTURE.md` afirmava que o scanner comparava os arquivos tocados com os caminhos declarados em `tasks.md`. Não compara. Scope creep é responsabilidade de revisão, não recurso do scanner, até ser implementado.
+- **`invoke_subagent(...)`** — aparece como código em duas skills. É um primitivo do harness, não fornecido por este repositório. As skills agora dizem isso explicitamente.
+
+---
+
+## As cinco leis de ferro
+
+De [`rules/kairos-core.md`](rules/kairos-core.md):
+
+1. **Nenhum código de produção sem um teste que falha.** Se você não viu o teste falhar, você não sabe o que ele testa.
+2. **Nenhum chute na depuração.** Reproduza o defeito em um teste mínimo antes de tocar no código de produção.
+3. **A verdade é o `git diff`.** Alegações não são evidência. Saída de comando e inspeção de diff são.
+4. **Cace as seis fraudes clássicas** — checks enfraquecidos, conclusão falsa, scope creep, ação não autorizada, traição de spec, debris.
+5. **Especificações vivas.** Trabalho concluído arquiva sua spec em `.kairos/specs/`.
+
+A lei 3 é a que este projeto violou mais profundamente, e a razão da retratação no topo desta página.
+
+---
+
+## O Dial Elástico
+
+Três profundidades de processo, escolhidas pelo classificador em `dial`:
+
+| Modo | Indicado para | Pipeline | Subagentes | Alvo de orçamento |
+| :--- | :--- | :--- | :--- | :--- |
+| **Alpha** | UI, texto, layout, CSS, edições pequenas | micro-delta na mesma conversa, edição cirúrgica, checagem de sanidade do diff | 0 | pequeno |
+| **Beta** | novo endpoint, mudança de lógica, bugfix | recon → delta spec → worktree → TDD estrito → varredura de diff | 1 | médio |
+| **Gamma** | auth, pagamentos, migrações, lógica central | recon → spec + crítico de contexto zero → worktree → TDD → mutation testing → auditoria adversarial | até 3 | grande |
+
+**Limitação conhecida, dita sem rodeio:** a classificação é casamento de palavras-chave sobre a descrição da tarefa (`ALPHA_KEYWORDS` / `GAMMA_KEYWORDS` em `kairos_cli.py`). Ela não sabe quais arquivos você vai tocar, qual o tamanho do diff, nem se a área tem cobertura de teste. Consequências:
+
+- Um ajuste de CSS que mencione "balance" classifica como **Gamma**.
+- `--force-beta` não sobrepõe uma palavra-chave Gamma (correção em andamento).
+- Os números de orçamento são alvos de planejamento, não medições. O KAIROS não mede seu consumo de tokens. Ver "Telemetria".
+
+Um roteador de risco baseado em sinais objetivos — caminhos alterados, tamanho do diff, cobertura de teste da área, histórico de incidentes — é a versão honesta dessa ideia e ainda não está construído. Ver [`docs/OPPORTUNITIES.md`](docs/OPPORTUNITIES.md).
+
+---
+
+## As quatro personas
+
+| Agente | Papel | O que ele realmente faz |
+| :--- | :--- | :--- |
+| `kairos_scout` | Technology Scout | Lê manifestos de dependência e sinaliza pacotes com histórico de quebra de API. Nada além disso. |
+| `kairos_critic` | Crítico Goldfish | Revisa uma spec sem contexto de conversa, para não ser convencido a concordar. |
+| `kairos_worker` | Executor Cirúrgico | TDD dentro de uma worktree; toca apenas os arquivos declarados. |
+| `kairos_auditor` | Auditor de Diff | Reexecuta comandos, inspeciona o diff, reporta evidência. O veredito dele vale o que vale o scanner — leia as limitações abaixo antes de confiar. |
+
+---
+
+## O que o scanner realmente pega
+
+`scan_diff_text()` roda expressões regulares sobre as linhas adicionadas de um `git diff`. Ele captura de forma confiável as formas **literais** de:
+
+- testes pulados, focados ou comentados (`test.skip`, `xit`, `@pytest.mark.skip`, `// assert ...`)
+- handlers de exceção vazios ou engolidos (`except: pass`, `catch (e) {}`)
+- stubs retornando constantes triviais (`def f(): pass`, `return null;`)
+- asserções tautológicas (`assert True`, `assert 1 == 1`, `expect(true).toBeTruthy()`)
+- deleção líquida de asserções ou de funções de teste
+- identificadores de modelo obsoletos em código
+
+Ele **não** pega, a partir da v1.2:
+
+- uma asserção enfraquecida no lugar (`assert x == 'valid'` → `assert x is not None`)
+- um handler que registra o erro e então retorna sucesso
+- um mock substituindo a unidade sob teste
+- uma função de validação que retorna `True` incondicionalmente
+- uma guarda removida
+
+Uma sonda independente com oito padrões de fraude detectou três. O corpus em `tests/fixtures/fraud_corpus/` existe para tornar esse número mensurável e para subi-lo; o recall e a precision medidos atualmente estão em [`CLAIMS.md`](CLAIMS.md) — o que a execução do corpus reportar, não uma meta reescrita como resultado.
+
+**O scanner não exclui mais o próprio arquivo-fonte da auditoria.** Até a v1.1.0 ele excluía (`if current_file.endswith("kairos_cli.py"): continue`), o que significava que a ferramenta não conseguia auditar a ferramenta. Essa exclusão foi removida.
+
+---
+
+## Telemetria: o que ela mede e o que não mede
+
+A linha de status é assim:
 
 ```text
-⚡ [KAIROS | Stage: <STAGE> | Mode: <MODE> | Tokens: <CONSUMED>/<CAP> tok | Left: <REMAINING>]
+⚡ [KAIROS | Stage: BUILDING | Mode: BETA | Budget: 65,000 | Spent: UNMEASURED]
 ```
 
-### Estágios Oficiais do Ciclo de Vida (Pipeline de 9 Etapas):
-1. `IDLE`: Nenhuma tarefa em execução no momento.
-2. `CLASSIFIED`: Complexidade da tarefa analisada e orçamento de tokens alocado pelo Dial Elástico.
-3. `RESEARCHING`: Reconhecimento Prévio ao Brainstorming (`kairos scout` / `kairos_scout`) inspecionando manifestos e primitivas nativas modernas.
-4. `BRAINSTORMING`: Ideação arquitetural informada aproveitando os recursos nativos do framework (Regra da Superfície Mínima).
-5. `SPECIFYING`: Redação de Delta Spec e contratos técnicos em andamento (`.kairos/changes/`).
-6. `BUILDING`: Git Worktree isolada criada; ciclo TDD (Red-Green-Refactor) ativo.
-7. `AUDITING`: Auditoria Adversarial Zero-Trust inspecionando o diff, caçando as 6+ fraudes e rodando testes de mutação.
-8. `VERIFIED`: Diff verificado e limpo com evidência conclusiva e 0% de regressões.
-9. `SHIPPED`: Especificação viva promovida para `.kairos/specs/`, ambiente limpo e lições registradas.
+`Stage` e `Mode` vêm de `.kairos/state.json`. `Budget` é um alvo de planejamento.
 
-Verifique o status em tempo real e o Mission Control Dashboard a qualquer momento via terminal:
-```bash
-python3 scripts/kairos_cli.py status --dashboard
-# Ou apenas o cabeçalho compacto:
-python3 scripts/kairos_cli.py status --header-only
-```
+`Spent` é **`UNMEASURED`** até você importar dados reais de uso com `kairos token import --usage <log.jsonl>`, que lê contagens reais de tokens de input/output/cache e custo de um log de harness, e registra o hash do arquivo-fonte junto. Até a v1.1.0 o campo era preenchido por `kairos token add <n>` — o agente incrementando o próprio contador, que é exatamente o modo de falha que este projeto diz detectar. Esse comando foi removido.
+
+Se nada foi medido, o status diz isso. Não imprime zero para você inferir que zero tokens foram gastos.
 
 ---
 
-## 🎯 O Que o KAIROS FAZ e O Que NÃO FAZ (Fronteiras Claras de Escopo)
+## Instalação e primeiro uso
 
-Para evitar ilusões ou superengenharia, o KAIROS define fronteiras operacionais explícitas:
-
-### ✅ O QUE O KAIROS FAZ:
-1. **Governa a Cognição do Agente:** Elimina o viés de concordância (*sycophancy*, onde a IA aprova cegamente más ideias) acionando subagentes críticos com contexto zero (`kairos_critic`) para estressar especificações.
-2. **Elimina o Desperdício de Tokens (Motor Elástico):** Escala dinamicamente a profundidade entre Modo Alpha (Lite/UI), Modo Beta (Standard) e Modo Gamma (Crítico), economizando até **85% de tokens** em pequenas alterações visuais.
-3. **Combate o Knowledge Cutoff e Alucinações (`kairos_scout`):** Inspeciona os manifestos reais do projeto (`package.json`, `pyproject.toml`, `pubspec.yaml`, `Cargo.toml`, `go.mod`) para detectar saltos de versão e garantir que APIs modernas sejam usadas em vez da memória desatualizada de treinamento.
-4. **Impõe Brainstorming Informado por Pesquisa (Research-First):** Elimina a reinvenção da roda descobrindo o que versões modernas (ex.: Colyseus 0.15+, Next 15, Pydantic v2) já resolvem de fábrica *antes* de iniciar a ideação arquitetural.
-5. **Isola Ambientes de Trabalho:** Impõe o uso de `git worktree` para garantir que o agente nunca polua ou quebre a branch principal durante o desenvolvimento.
-6. **Impõe TDD Estrito:** Proíbe a geração de código de produção sem antes observar um teste automatizado falhar (*sem teste prévio = sem código*).
-7. **Caça Fraudes de Código por IA:** Algoritmo de inspeção do `git diff` real que bloqueia asserções enfraquecidas, testes comentados, blocos multilinhas `try/catch` vazios, funções vazias (*stubs*) e lavagem de asserções (`assert True`).
-8. **Valida a Força dos Testes com Mutação (K-Mutant):** Prova que os testes são reais e não ilusões tautológicas invertendo operadores lógicos e confirmando a quebra do teste.
-9. **Mantém Documentação Viva e Aprendizado em Repositório:** Transforma deltas de requisitos (`.kairos/changes/`) em documentação canônica persistente (`.kairos/specs/`) e registra lições contínuas em `.kairos/lessons.md`.
-10. **Extensibilidade Nativa e Auto-Atualização:** Atualiza-se diretamente do repositório upstream oficial (`kairos update`) e descobre dinamicamente agentes e skills plugáveis (`kairos registry`).
-
-### ❌ O QUE O KAIROS NÃO FAZ:
-1. **NÃO é um Modelo de Linguagem Próprio:** O KAIROS não gera tokens por conta própria; é uma camada de controle e governança que disciplina Modelos de Fronteira e Raciocínio (ex: Gemini 4 Argon, Gemini 3.8 Flash, Claude Sonnet 4.5/5.5, GPT-6 Astra, GPT-6.1 Sol, o4-mini).
-2. **NÃO Adivinha Visão de Produto:** O KAIROS não inventa regras de negócio nem toma decisões de produto. Ele exige aprovação humana nos portões de especificação.
-3. **NÃO Substitui Linters Estáticos Tradicionais:** Não é um SonarQube ou ESLint. O KAIROS foca em **integridade de intenção, conformidade de contratos e fraudes/alucinações induzidas por IA**.
-4. **NÃO Aceita Alegações Verbais:** Afirmações como *"todos os testes passaram"* ou *"implementação finalizada"* têm valor zero sem a evidência real do comando no terminal e um diff auditado.
-5. **NÃO Executa Ações Destrutivas sem Autorização:** Nunca fará git push para repositórios remotos, deploy em produção ou alteração destrutiva de banco de dados sem consentimento explícito.
-
----
-
-## 🧠 O Motor Elástico de Tokens (*The Elastic Dial*)
-
-Os frameworks de agentes tradicionais sofrem da **Falácia do Monólito**: forçar qualquer tarefa simples (como ajustar a margem de um botão) por um processo de 20 minutos e 200k tokens. O KAIROS resolve isso com o **Dial Elástico**:
-
-```mermaid
-flowchart TD
-    IN["Demanda do Desenvolvedor"] --> DIAL{"KAIROS Elastic Dial"}
-
-    DIAL -- "Baixo Risco (UI, CSS, typo, layout, <30 LOC)" --> A["MODO ALPHA (Lite / UI)<br/>• Zero subagentes externos<br/>• Micro-delta de 3 pontos no chat<br/>• Edição cirúrgica direta + diff check de a11y<br/><b>Orçamento: ~5k - 15k tokens (85% de economia)</b>"]
-    
-    DIAL -- "Médio Risco (Novo endpoint, lógica de serviço, bugfix)" --> B["MODO BETA (Standard)<br/>• Reconhecimento de stack (kairos scout)<br/>• Delta Spec (.kairos/changes/)<br/>• Git Worktree isolada<br/>• TDD Estrito (Red -> Green -> Refactor)<br/>• Scan automático anti-fraude no diff<br/><b>Orçamento: ~30k - 65k tokens (60% de economia)</b>"]
-    
-    DIAL -- "Alto Risco (Auth, pagamentos, migrações DB, core)" --> C["MODO GAMMA (Critical / Enterprise)<br/>• Reconhecimento prévio vivo (kairos_scout)<br/>• Spec completa + Crítico Goldfish (kairos_critic)<br/>• Worktree + Subagentes Executor e Auditor<br/>• Testes de Mutação K-Mutant + Auditoria Zero-Trust<br/>• Tabela Formal de Evidências<br/><b>Orçamento: ~120k - 200k tokens (Garantia Máxima)</b>"]
-```
-
----
-
-## 🤖 As 4 Personas Canônicas
-
-O KAIROS orquestra 4 personas especializadas e desacopladas:
-
-| Persona | Papel | Mandato e Doutrina Operacional |
-| :--- | :--- | :--- |
-| **`kairos_scout`** | Technology Scout & Research Scientist | Escaneia manifestos (`package.json`, `pyproject.toml`), consulta documentações vivas e descobre primitivas nativas modernas *antes* do brainstorming para evitar a reinvenção da roda. |
-| **`kairos_critic`** | O Crítico Goldfish | Arquiteto sênior instanciado com **zero contexto prévio de conversa** para revisar especificações friamente, sem bajulação nem viés conversacional. |
-| **`kairos_worker`** | O Executor Cirúrgico | Engenheiro cirúrgico operando dentro de `git worktrees` isoladas. Segue estritamente os princípios Karpathy: toca apenas nos arquivos declarados e escreve código mínimo. |
-| **`kairos_auditor`** | Auditor Adversarial Zero-Trust | Auditor independente que inspeciona o `git diff` linha por linha caçando as 6+ fraudes clássicas de LLM e emitindo vereditos baseados em evidência (`VERIFIED` ou `REFUTED`). |
-
----
-
-## 🔬 Laboratório Anti-Vaporware: Protocolo K-Bench
-
-Para comprovar cientificamente que o KAIROS funciona e não é apenas "teatro de prompts", criamos o **K-Bench**—uma suite automatizada de avaliação que executa 4 desafios de estresse comparando 3 abordagens:
+Requer Python 3.10+. Sem dependências.
 
 ```bash
-python3 benchmark/runner.py --test-detector --run
+git clone https://github.com/ismaelsoilet/kairos-framework
+cd seu-projeto
+python3 /caminho/para/kairos-framework/scripts/kairos_cli.py init
+python3 /caminho/para/kairos-framework/scripts/kairos_cli.py dial "adicionar retry no webhook de pagamento"
 ```
 
-### Resultados do Scorecard Empírico:
-
-```
-==========================================================================
-📊 K-BENCH COMPARATIVE SCORECARD
-==========================================================================
-Cenário                | Vibe Coding      | Heavy Monolith   | KAIROS (Elastic)
-----------------------------------------------------------------------------
-K-01: The Concurrency  | 12k tok | 20% ok | 160k tok | 95% ok | 140k tok | 98% ok
-K-02: Brownfield UI L  | 9k tok | 70% ok  | 120k tok | 95% ok | 12k tok | 95% ok
-K-03: Backward-Compat  | 18k tok | 50% ok | 140k tok | 90% ok | 55k tok | 95% ok
-K-04: Adversarial Pre  | 10k tok | 50% ok | 150k tok | 90% ok | 45k tok | 95% ok
-----------------------------------------------------------------------------
-TOTAL DE TOKENS        | 49k tokens       | 570k tokens      | 252k tokens
-ECONOMIA DE TOKENS     | --               | Base (0%)        | 55% de Economia!
-FRAUD ESCAPE RATE      | ~46.7% vazamento | ~3.8% vazamento  | 0.0% (Zero Trust)
-==========================================================================
-🎯 Detecção de Fraudes Sintéticas: 3/3 (100% das fraudes barradas)
-```
-
-**Achados Empíricos Centrais:**
-* O **Vibe Coding** gasta menos tokens inicialmente, mas deixa passar falhas críticas e testes enfraquecidos em **46,7% das vezes**.
-* O **Heavy Monolith** garante segurança, mas queima **mais de 570.000 tokens** em tarefas corriqueiras.
-* O **KAIROS** atinge a maior taxa de sucesso (95-98%) com **0% de vazamento de fraudes**, enquanto economiza de **55% a 85% de tokens**.
-
----
-
-## 🛠️ Guia Completo da CLI
-
-A CLI do KAIROS foi escrita em Python 3 puro, sem dependências externas:
+### Referência de comandos
 
 ```bash
-# 1. Inicializar o KAIROS no repositório
-python3 scripts/kairos_cli.py init
-
-# 2. Avaliar a complexidade e alocar orçamento de tokens (Dial Elástico)
-python3 scripts/kairos_cli.py dial "Adicionar gerenciador de reconexão de salas Colyseus"
-
-# 3. Reconhecimento de Stack Prévio ao Brainstorming (Combate ao Cutoff)
-python3 scripts/kairos_cli.py scout
-python3 scripts/kairos_cli.py scout --all
-python3 scripts/kairos_cli.py scout --save-spec
-
-# 4. Criar uma Delta Spec
-python3 scripts/kairos_cli.py spec adicionar_reconexao_salas
-
-# 5. Criar uma Git Worktree isolada
-python3 scripts/kairos_cli.py worktree create adicionar_reconexao_salas
-
-# 6. Consultar a telemetria e o Dashboard de Missão
-python3 scripts/kairos_cli.py status
-python3 scripts/kairos_cli.py status --dashboard
-
-# 7. Executar Testes de Mutação K-Mutant
-python3 scripts/kairos_cli.py mutate src/room.py --test "pytest tests/test_room.py"
-
-# 8. Rodar a Auditoria Adversarial Zero-Trust no diff
-python3 scripts/kairos_cli.py audit --base main
-
-# 9. Memória Viva e Aprendizado Contínuo (Lessons Learned)
-python3 scripts/kairos_cli.py lesson add --title "Colyseus Reconnect" --rule "Usar allowReconnection nativo"
-python3 scripts/kairos_cli.py lesson list
-
-# 10. Motor de Auto-Atualização e Registro de Extensões
-python3 scripts/kairos_cli.py update
-python3 scripts/kairos_cli.py registry
-
-# 11. Promover a especificação para a documentação viva e limpar o ambiente
-python3 scripts/kairos_cli.py archive adicionar_reconexao_salas
-python3 scripts/kairos_cli.py worktree remove adicionar_reconexao_salas
+kairos init                                     # cria .kairos/ e state.json
+kairos dial "<tarefa>" [--force-alpha|--force-beta|--force-gamma]
+kairos scout [--all] [--save-spec]              # reconhecimento de manifestos
+kairos spec <nome>                              # delta spec de 5 arquivos
+kairos worktree create|remove|list <nome>
+kairos mutate <arquivo> --test "<cmd>" [--max-mutants N] [--timeout S]
+kairos audit --base main [--worktree PATH|--root-only]
+kairos archive <change_id>
+kairos rollback [--worktree PATH|--root-only]
+kairos status [--dashboard|--header-only]
+kairos token import --usage <log.jsonl>
+kairos lesson add|list
+kairos registry
+kairos export <claude|cursor|agents|universal|all>
+kairos update [--skip-self-test]
 ```
 
 ---
 
-## 🌐 Exportação Universal Multi-Harness
-
-Exporte as diretrizes e regras do KAIROS para qualquer ambiente com um único comando:
-
-```bash
-python3 scripts/kairos_cli.py export all
-```
-* **Claude Code:** Cria `CLAUDE.md` e `.claude/`.
-* **Cursor IDE:** Cria `.cursorrules` e `.cursor/rules/`.
-* **Agentes Universais (Windsurf / Gemini CLI / OpenAI / Roo Code):** Cria `AGENTS.md`.
-
----
-
-## 🔬 Benchmark Empírico e Telemetria de Hardware (v1.1.0)
-
-Em Novembro de 2026, o KAIROS foi submetido a um benchmark empírico comparando **Vibe Coding** contra **KAIROS SDLC (Modo GAMMA)** em duas aplicações SaaS idênticas rodando em portas locais (5051 e 5052), seguido por execução real de subagentes sob o modelo **Google Gemini 3.8 Flash (High)**:
-
-* 📊 **100% Zero-Defeito na 1ª Passagem:** Sob 50 threads concorrentes de reserva VIP, o Vibe Coding quebrou em produção permitindo sobre-reserva crítica (50 sucessos para limite de 10). O KAIROS com `AsyncMutex` alocou exatamente 10 (HTTP 200) e rejeitou 40 (HTTP 409 Conflict) com 0 assentos restantes.
-* 💰 **19.3% de Economia Líquida de Tokens de Hardware:** O Vibe Coding quebrou e exigiu um ciclo caro de reparo e depuração (61.5k inicial + 50.7k conserto = 112.3k tokens totais). O KAIROS entregou o código blindado na primeira passagem (90.6k tokens), resultando em **21.643 tokens ativos economizados** e **33,15% de economia com cache read**.
-* 🛡️ **Auditoria Adversarial de Confiança Zero (`[ ✅ VERIFIED ]`):** Um auditor independente executando Command Code (DeepSeek v4.1 Flash) testou fisicamente todos os 6 critérios empíricos diretamente nas portas locais sem confiar em alegações de texto, emitindo a certificação oficial `[ ✅ VERIFIED ]`.
-
-👉 Leia o relatório científico completo: **[Relatório do Benchmark Empírico e Telemetria de Hardware](docs/EMPIRICAL_BENCHMARK_REPORT.md)**.
-
----
-
-## 📚 Central de Documentação Técnica
-
-Explore nossos guias aprofundados no diretório [`docs/`](docs/):
-
-* 🔬 **[Guia Anti-Cutoff e Tech Scout](docs/TECH_SCOUT_E_RESEARCH.md):** Como o `kairos_scout` elimina alucinações de métodos legados.
-* 🧠 **[Research-First Brainstorming](docs/RESEARCH_FIRST_BRAINSTORMING.md):** Estudo de caso Colyseus / Omnistage Engine e a Regra da Superfície Mínima.
-* 🧬 **[Evolução Contínua e Upstream Ingestion](docs/EVOLUCAO_E_UPSTREAM_FRAMEWORKS.md):** Como o KAIROS se atualiza a partir de OpenSpec, EGM, Superpowers e Fable.
-* 🔄 **[Ecossistema e Registro Plugável](docs/ECOSSISTEMA_E_AUTO_ATUALIZACAO.md):** Estendendo o KAIROS com agentes e skills customizadas.
-* 🛡️ **[Relatório do Red Team Adversarial](docs/ADVERSARIAL_RED_TEAM_REPORT.md):** 18 vulnerabilidades críticas testadas, corrigidas e verificadas.
-* 📜 **[As 10 Lições de Agente](docs/AGENT_LESSONS.md):** Heurísticas cognitivas para agentes autônomos de codificação.
-* 🏛️ **[Arquitetura do Sistema](docs/ARCHITECTURE.md) & [Topografia Geral](docs/ARQUITETURA_GERAL.md):** Blueprints técnicos completos.
-
----
-
-## 📁 Estrutura de Arquivos do Projeto
+## Estrutura do repositório
 
 ```text
 kairos-framework/
-├── plugin.json                 # Manifesto do plugin KAIROS
-├── README.md                   # Documentação mestre em inglês
-├── README.pt-br.md             # Documentação mestre em português
-├── rules/
-│   └── kairos-core.md          # Diretrizes, Dial Elástico e Leis de Ferro
-├── agents/
-│   ├── kairos_scout.md         # O Pesquisador e Validador Técnico (Anti-Cutoff)
-│   ├── kairos_critic.md        # O Crítico Goldfish (revisor sem contexto)
-│   ├── kairos_worker.md        # O Executor Cirúrgico (TDD e Karpathy)
-│   └── kairos_auditor.md       # O Auditor Adversarial Zero-Trust
-├── skills/
-│   ├── kairos-orchestrator/    # Entrada principal (/kairos)
-│   ├── kairos-dial/            # Classificador elástico (/kairos:dial)
-│   ├── kairos-research/        # Reconhecimento Anti-Cutoff (/kairos:scout)
-│   ├── kairos-spec/            # Delta Specs & Contratos (/kairos:spec)
-│   ├── kairos-build/           # Git Worktrees & TDD (/kairos:build)
-│   ├── kairos-judge/           # Auditoria anti-fraude (/kairos:audit)
-│   └── kairos-sync/            # Documentação viva e drift (/kairos:ship)
-├── docs/                       # 12+ Guias Técnicos e Arquiteturais
-├── scripts/
-│   └── kairos_cli.py           # CLI operacional zero-dependência
-└── benchmark/
-    └── runner.py               # Testbed científico automatizado (K-Bench)
+├── RETRACTION.md              # o que foi alegado, por que estava errado
+├── CLAIMS.md                  # toda alegação quantitativa viva + artefato
+├── rules/kairos-core.md       # diretrizes e as cinco leis de ferro
+├── agents/                    # personas scout, critic, worker, auditor
+├── skills/                    # 7 skills de protocolo (dial, spec, build, judge, …)
+├── scripts/kairos_cli.py      # a CLI sem dependências
+├── tests/
+│   └── fixtures/fraud_corpus/ # diffs rotulados (fraude vs limpo) + veredito esperado
+├── benchmark/
+│   ├── PREREGISTRATION.md     # escrito antes da coleta de dados
+│   └── case_study_gemini_n1/  # uma execução real, reclassificada como estudo de caso
+└── docs/                      # arquitetura, lições, oportunidades
 ```
 
 ---
 
-## ⚖️ Licença
+## Documentação
 
-Licenciado sob a [Apache License, Versão 2.0](LICENSE).  
-Construído com disciplina por **Ismael Soilet & DeepMind AI Pair**.
+- [`RETRACTION.md`](RETRACTION.md) — as alegações retiradas e o mecanismo por trás de cada uma.
+- [`CLAIMS.md`](CLAIMS.md) — o livro-razão. Todo número neste repositório precisa de uma linha.
+- [`docs/OPPORTUNITIES.md`](docs/OPPORTUNITIES.md) — que partes disto vale construir para outras pessoas, e o que não vale.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — como as peças se encaixam.
+- [`docs/AGENT_LESSONS.md`](docs/AGENT_LESSONS.md) — heurísticas de comportamento, sem alegações de desempenho.
+- [`docs/case-studies/GEMINI_N1.md`](docs/case-studies/GEMINI_N1.md) — uma execução, os dois braços, incluindo a falha de desenho.
+
+---
+
+## Licença
+
+Apache License 2.0 — ver [`LICENSE`](LICENSE).
+
+Construído por Ismael Soilet, com assistência de IA. A assistência de IA escreveu algumas das alegações que precisaram ser retratadas; a retratação foi escrita com as mesmas ferramentas e conferida contra a saída observada.
