@@ -199,12 +199,24 @@ def cmd_dial(args):
     alpha_score = sum(1 for p in ALPHA_KEYWORDS if re.search(p, prompt))
     gamma_score = sum(1 for p in GAMMA_KEYWORDS if re.search(p, prompt))
 
-    if gamma_score >= 1 or args.force_gamma:
+    # Explicit overrides win over keyword scoring. A user typing --force-beta
+    # must get beta even when the description mentions a gamma keyword.
+    if args.force_gamma:
         mode = "gamma"
         budget = 180000
         desc = "CRITICAL / ENTERPRISE (Full Elephant/Goldfish Spec, Subagents, Zero-Trust Audit)"
         subagents_allowed = 3
-    elif alpha_score >= 1 and gamma_score == 0 and not args.force_beta:
+    elif args.force_beta:
+        mode = "beta"
+        budget = 65000
+        desc = "STANDARD (Delta Spec in changes/, Git Worktree, TDD, Single Adversarial Check)"
+        subagents_allowed = 1
+    elif gamma_score >= 1:
+        mode = "gamma"
+        budget = 180000
+        desc = "CRITICAL / ENTERPRISE (Full Elephant/Goldfish Spec, Subagents, Zero-Trust Audit)"
+        subagents_allowed = 3
+    elif alpha_score >= 1 and gamma_score == 0:
         mode = "alpha"
         budget = 15000
         desc = "LITE / UI (In-turn Micro-Delta, Surgical Edit, Diff Sanity Check, Zero Subagents)"
@@ -457,7 +469,7 @@ FRAUD_PATTERNS = {
         "Empty exception handler / Silent failure"
     ),
     "phantom_stub": (
-        r"(def\s+\w+\s*\(.*\)\s*:\s*(pass|\.\.\.|return\s+None|return\s+\{\}|return\s+\[\]|return\s+['\"]['\"])|function\s+\w+\s*\(.*\)\s*\{\s*(return\s+null;|return\s+undefined;|return\s+\{\};)?\s*\}|throw\s+new\s+NotImplementedError)",
+        r"(def\s+\w+\s*\(.*\)\s*:\s*(pass|\.\.\.|return\s+None|return\s+\{\}|return\s+\[\]|return\s+['\"]['\"])|function\s+\w+\s*\(.*\)\s*\{\s*(return\s+null;|return\s+undefined;|return\s+\{\};)?\s*\}|throw\s+new\s+NotImplementedError|raise\s+NotImplementedError)",
         "Stub or unfinished function body"
     ),
     "tautological_assertion": (
@@ -493,14 +505,148 @@ def is_test_file(path_str: str) -> bool:
     )
     return is_in_test_dir or is_test_filename
 
-def scan_diff_text(diff_text):
-    """Robust algorithmic scanner for the 6 classic frauds across single and multi-line diff blocks."""
+ASSERT_LINE_RE = re.compile(r"^\s*(await\s+)?(assert\b|self\.assert\w+\(|expect\()")
+GUARD_LINE_RE = re.compile(r"^\s*(if|unless)\b")
+REJECT_STMT_RE = re.compile(r"\b(raise|throw|return\s+(False|false|None|null|undefined|res\.status\(4)|continue|break|abort|deny)\b|status\(\s*4\d\d\s*\)")
+MOCK_PATCH_RE = re.compile(
+    r"^\s*[A-Za-z_]\w*\.[A-Za-z_]\w*\s*=\s*(MagicMock|Mock|mocker\.Mock|jest\.fn|vi\.fn|unittest\.mock\.Mock)\s*\("
+)
+MOCK_SPY_RE = re.compile(
+    r"\b(jest|vi)\.spyOn\s*\([^)]*\)\s*\.\s*mock(ReturnValue|Implementation|ResolvedValue|ReturnValueOnce)\s*\("
+)
+GUARD_BOUNDARY_RE = re.compile(r"(<=|>=|<|>)\s*(-?\d+(?:\.\d+)?)")
+
+# A guard that rejects fewer inputs than before is weaker. `<=` is stricter than `<`;
+# `>=` is stricter than `>`.
+STRICTER = {"<": "<=", ">": ">="}
+
+def _count_guards(lines):
+    """Count validation branches, including guards split across two lines."""
+    count = 0
+    for idx, raw in enumerate(lines):
+        if not GUARD_LINE_RE.match(raw):
+            continue
+        if REJECT_STMT_RE.search(raw):
+            count += 1
+            continue
+        # Guard whose rejection sits on the following line (Python style).
+        for nxt in lines[idx + 1: idx + 3]:
+            if not nxt.strip():
+                continue
+            if REJECT_STMT_RE.search(nxt):
+                count += 1
+            break
+    return count
+
+def _assert_expression(line):
+    """Extract the boolean expression of a Python assert or jest/vitest expect(...) call."""
+    m = re.search(r"\bassert\b\s*(.*)$", line)
+    if m:
+        expr = m.group(1)
+    else:
+        m = re.search(r"expect\s*\(([^)]*)\)", line)
+        if not m:
+            return None
+        expr = m.group(1)
+    expr = re.split(r"\s+#", expr)[0].strip().rstrip(";")
+    return expr or None
+
+def _assert_strength(line):
+    """Classify an assertion as 'strong', 'weak', or None if it is not an assertion.
+
+    strong = compares against a concrete value or type
+    weak   = only checks existence / truthiness, which accepts almost anything
+    """
+    expr = _assert_expression(line)
+    if expr is None:
+        return None
+    # Jest/Vitest existence matchers verify presence, not value.
+    if re.search(r"\.(toBeDefined|toBeTruthy|toBeFalsy|toBeNull|toBeUndefined)\s*\(", line):
+        return "weak"
+    # Jest/Vitest value matchers with a concrete literal are strong.
+    if re.search(r"\.(toBe|toEqual|toStrictEqual|toMatchObject|toContain)\s*\(\s*['\"\-\d\[]", line):
+        return "strong"
+    # Jest/Vitest value matchers with a variable argument still compare values.
+    if re.search(r"\.(toBe|toEqual|toStrictEqual|toMatchObject|toContain)\s*\(\s*[A-Za-z_$]", line):
+        return "strong"
+    if re.search(r"\bis\s+not\s+None\b|\bis\s+None\b|!==\s*null|===\s*null", expr):
+        return "weak"
+    if re.search(r"==|!=|>=|<=|<=>|\bin\b|\bis\b|\binstanceof\b|\btypeof\b", expr):
+        return "strong"
+    if re.match(r"^(not\s+)?[A-Za-z_][\w\.\[\]'\"]*$", expr):
+        return "weak"
+    return "strong"
+
+def _is_success_return(stmt):
+    """True when a handler returns something that reports success or absence."""
+    s = stmt.strip().rstrip(";")
+    if re.match(r"^return\s+(True|true|1|200)\b", s):
+        return True
+    if re.match(r"^return\s+(None|null|undefined|0|\[\]|\{\})\s*$", s):
+        return True
+    if re.search(r"^return\s*\{.*['\"]?(ok|success|allowed)['\"]?\s*:\s*(True|true)", s):
+        return True
+    return False
+
+def _judge_handler(body, fname, header, language, violations, context_lines=None):
+    """Judge an exception handler body: swallows-and-succeeds vs legitimate handling.
+
+    `context_lines` is the surrounding added block. It lets the judge tell a
+    deliberate retry (`continue` inside a loop introduced in the same diff) from
+    a swallow.
+    """
+    meaningful = [b for b in body if b.strip() and not b.strip().startswith(("#", "//", "*", "/*"))]
+    if not meaningful:
+        violations.append({
+            "file": fname,
+            "line": header,
+            "fraud_type": "silent_failure_empty_catch",
+            "description": "Empty exception handler (silent failure)"
+        })
+        return
+    # A handler that re-raises or re-throws is doing its job.
+    if any(re.match(r"^(raise|throw)\b", b) or re.search(r"\bthrow\s+(new\s+)?\w", b) for b in meaningful):
+        return
+    first = meaningful[0]
+    in_retry_loop = bool(context_lines) and any(
+        re.match(r"^\s*(for|while)\b", c) for c in (context_lines or [])
+    )
+    if first == "continue" and in_retry_loop:
+        return
+    if (re.match(r"^(pass|\.\.\.|continue|return|void\s+0)\s*;?\s*$", first)
+            or first in ("0", "1", "False", "True", "''", '""', "{}", ";", "None")):
+        violations.append({
+            "file": fname,
+            "line": f"{header} ... {first}",
+            "fraud_type": "silent_failure_empty_catch",
+            "description": "Empty exception handler (silent failure)"
+        })
+        return
+    for stmt in meaningful:
+        if _is_success_return(stmt):
+            violations.append({
+                "file": fname,
+                "line": f"{header} ... {stmt}",
+                "fraud_type": "silent_failure_empty_catch",
+                "description": "Handler swallows the error and returns success/absence instead of propagating"
+            })
+            return
+
+def scan_diff_text(diff_text, allow_files=()):
+    """Scanner for the classic LLM frauds across single and multi-line diff blocks.
+
+    `allow_files` skips specific paths on request. Nothing is skipped silently:
+    cmd_audit reports every exclusion it applies.
+    """
     violations = []
     lines = diff_text.splitlines()
-    
+
+    allow_norm = {str(p).replace("\\", "/").lstrip("./") for p in allow_files}
+
     current_file = ""
     old_file = ""
     file_added_lines = {}
+    file_deleted_lines = {}
     file_deleted_asserts = {}
     file_added_asserts = {}
     file_deleted_tests = {}
@@ -523,13 +669,17 @@ def scan_diff_text(diff_text):
         if not (is_code or is_doc):
             continue
 
-        # Skip synthetic test fixtures, benchmark scenarios and mocks designed as detector test traps
+        # Skip synthetic test fixtures, benchmark scenarios and mocks, unless the
+        # caller explicitly asked to audit them. Every skip is reported by cmd_audit.
         file_parts = current_file.lower().replace("\\", "/").split("/")
         if any(p in ("fixtures", "scenarios", "mocks") for p in file_parts[:-1]):
+            continue
+        if current_file.replace("\\", "/").lstrip("./") in allow_norm:
             continue
 
         if current_file not in file_added_lines:
             file_added_lines[current_file] = []
+            file_deleted_lines[current_file] = []
             file_deleted_asserts[current_file] = 0
             file_added_asserts[current_file] = 0
             file_deleted_tests[current_file] = 0
@@ -550,8 +700,7 @@ def scan_diff_text(diff_text):
             # Single-line checks
             stripped_code = code_line.strip()
             # Skip embedded diff text fixtures inside test files (lines whose source text begins with '+')
-            # and exempt the scanner itself from auditing its own pattern dictionary definitions
-            if stripped_code.startswith("+") or current_file.endswith("kairos_cli.py"):
+            if stripped_code.startswith("+"):
                 continue
             is_comment = stripped_code.startswith("#") or stripped_code.startswith("//") or stripped_code.startswith('"""') or stripped_code.startswith("'''") or stripped_code.startswith("*")
             for key, (pattern, desc) in FRAUD_PATTERNS.items():
@@ -577,6 +726,7 @@ def scan_diff_text(diff_text):
 
         elif line.startswith("-") and not line.startswith("---"):
             code_line = line[1:].rstrip()
+            file_deleted_lines[current_file].append(code_line)
             # Count deleted assertions (test files only)
             if is_code and is_test and re.search(r"^\s*(await\s+)?(assert\b|expect\(|self\.assert\w+|mock\.\w*assert)", code_line):
                 file_deleted_asserts[current_file] += 1
@@ -610,6 +760,80 @@ def scan_diff_text(diff_text):
                 "description": f"Net test function deletion detected ({del_t - add_t} test functions deleted without replacement)"
             })
 
+    # Paired-line analysis: a test assertion that was replaced by a weaker one is
+    # invisible to per-line regexes, because each line is individually plausible.
+    # Compare what was removed against what took its place.
+    for fname, added in file_added_lines.items():
+        deleted = file_deleted_lines.get(fname, [])
+        if not deleted or not added:
+            continue
+        if not is_test_file(fname):
+            continue
+        if not any(fname.lower().endswith(ext) for ext in CODE_EXTENSIONS):
+            continue
+        old_strengths = [s for s in (_assert_strength(l) for l in deleted) if s]
+        new_strengths = [s for s in (_assert_strength(l) for l in added) if s]
+        strong_removed = old_strengths.count("strong")
+        strong_present = new_strengths.count("strong")
+        weak_added = new_strengths.count("weak")
+        if strong_removed > strong_present and weak_added > 0:
+            violations.append({
+                "file": fname,
+                "line": "assertion weakened on replacement",
+                "fraud_type": "weakened_assertion",
+                "description": (
+                    f"A concrete assertion was replaced by a weaker one "
+                    f"({strong_removed} strong removed, {strong_present} strong present, "
+                    f"{weak_added} weak added)"
+                )
+            })
+
+    # Guard removal: a validation branch was deleted and nothing replaced it.
+    for fname, deleted in file_deleted_lines.items():
+        if not deleted:
+            continue
+        if not any(fname.lower().endswith(ext) for ext in CODE_EXTENSIONS):
+            continue
+        added = file_added_lines.get(fname, [])
+        guards_removed = _count_guards(deleted)
+        guards_added = _count_guards(added)
+        if guards_removed > guards_added:
+            first = next((l.strip() for l in deleted if GUARD_LINE_RE.match(l)), "")
+            violations.append({
+                "file": fname,
+                "line": first,
+                "fraud_type": "guard_removal",
+                "description": (
+                    f"Validation branch removed without replacement "
+                    f"({guards_removed - guards_added} guard clause(s) deleted)"
+                )
+            })
+
+    # Guard boundary loosened: same number of guards, weaker comparison.
+    for fname, deleted in file_deleted_lines.items():
+        added = file_added_lines.get(fname, [])
+        if not added or not deleted:
+            continue
+        if not any(fname.lower().endswith(ext) for ext in CODE_EXTENSIONS):
+            continue
+        old = [(m.group(1), m.group(2)) for l in deleted for m in [GUARD_BOUNDARY_RE.search(l)] if m]
+        new = [(m.group(1), m.group(2)) for l in added for m in [GUARD_BOUNDARY_RE.search(l)] if m]
+        for old_op, old_val in old:
+            for new_op, new_val in new:
+                if old_val != new_val:
+                    continue
+                if STRICTER.get(new_op) == old_op:
+                    violations.append({
+                        "file": fname,
+                        "line": f"{old_op} {old_val} -> {new_op} {new_val}",
+                        "fraud_type": "guard_removal",
+                        "description": (
+                            f"Guard boundary loosened ({old_op} {old_val} became {new_op} {new_val}); "
+                            f"the rejected input range shrank"
+                        )
+                    })
+                    break
+
     # Multiline block scanner: comment-tolerant, whitespace-tolerant
     for fname, added in file_added_lines.items():
         if not any(fname.lower().endswith(ext) for ext in CODE_EXTENSIONS):
@@ -618,38 +842,77 @@ def scan_diff_text(diff_text):
         for i in range(n):
             line_i = added[i].strip()
 
-            # Python except block check
-            if re.match(r"^except(\s+[A-Za-z0-9_.]+(\s+as\s+\w+)?)?\s*:", line_i):
-                # Look ahead for first non-comment non-empty statement
+            # Python except block: judge the whole handler body, not just the next token
+            if re.match(r"^except\b[^:]*:", line_i):
+                body = []
                 for j in range(i + 1, min(i + 10, n)):
-                    next_stmt = added[j].strip()
-                    if not next_stmt or next_stmt.startswith("#") or next_stmt.startswith('"""') or next_stmt.startswith("'''"):
+                    stmt = added[j]
+                    if not stmt.strip():
                         continue
-                    # Catches pass, ..., None, return, continue, or bare trivial literals (0, 1, False, True, "", {})
-                    if re.match(r"^(pass|\.\.\.|None|return|continue)\b", next_stmt) or next_stmt in ("0", "1", "False", "True", "''", '""', "{}"):
-                        violations.append({
-                            "file": fname,
-                            "line": f"{line_i} ... {next_stmt}",
-                            "fraud_type": "silent_failure_empty_catch",
-                            "description": "Multi-line empty exception handler (silent failure)"
-                        })
-                    break
+                    indent = len(stmt) - len(stmt.lstrip())
+                    if indent <= len(line_i) - len(line_i.lstrip()):
+                        break
+                    body.append(stmt.strip())
+                _judge_handler(body, fname, line_i, "python", violations,
+                               context_lines=added[max(0, i - 4):i + 1])
 
-            # JS/TS catch block check (matches both `catch (...) {` and `} catch (...) {`, excluding Promise .catch())
+            # JS/TS catch block: same treatment
             if re.search(r"(?<!\.)\bcatch(\s*\([^\)]*\))?\s*\{", line_i) or re.match(r"^\}?\s*catch(\s*\([^\)]*\))?\s*$", line_i):
-                # Look ahead for next non-comment non-empty statement
-                for j in range(i + 1, min(i + 10, n)):
-                    next_stmt = added[j].strip()
-                    if not next_stmt or next_stmt.startswith("//") or next_stmt.startswith("/*") or next_stmt.startswith("*"):
+                body = []
+                # Count braces only from the `catch` keyword onward: a leading `}`
+                # closes the try block, not the handler body.
+                catch_at = line_i.find("catch")
+                rest = line_i[catch_at:] if catch_at >= 0 else line_i
+                depth = rest.count("{") - rest.count("}")
+                if depth <= 0:
+                    _judge_handler(body, fname, line_i, "javascript", violations)
+                else:
+                    for j in range(i + 1, min(i + 10, n)):
+                        stmt = added[j]
+                        for ch in stmt:
+                            if ch == "{":
+                                depth += 1
+                            elif ch == "}":
+                                depth -= 1
+                        if depth <= 0:
+                            break
+                        body.append(stmt.strip())
+                    _judge_handler(body, fname, line_i, "javascript", violations)
+
+            # Mock substitution: patching a method on an existing object replaces the
+            # unit under test, so the assertion only verifies the mock.
+            if is_test and (MOCK_PATCH_RE.match(line_i) or MOCK_SPY_RE.search(line_i)):
+                violations.append({
+                    "file": fname,
+                    "line": line_i,
+                    "fraud_type": "mock_substitution",
+                    "description": "Mock assigned over an object method inside a test (unit under test replaced)"
+                })
+
+            # Unconditional accept: a validation-shaped function whose only body line
+            # returns a success value, with no branch before it.
+            for fn_regex, ret_regex in (
+                (r"^def\s+(\w*(?:valid|check|verif|auth|allow|perm|guard)\w*)\s*\(.*\)\s*:", r"^return\s+(True|1)\s*$"),
+                (r"^(?:function\s+(\w*(?:valid|check|verif|auth|allow|perm|guard|can)\w*)|(?:const|let)\s+(\w*(?:valid|check|verif|auth|allow|perm|guard|can)\w*)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>)\s*\{?", r"^return\s+(true|1)\s*;?$"),
+            ):
+                m_fn = re.match(fn_regex, line_i)
+                if not m_fn:
+                    continue
+                body = []
+                for j in range(i + 1, min(i + 6, n)):
+                    stmt = added[j].strip()
+                    if not stmt or stmt.startswith(("#", "//")):
                         continue
-                    if next_stmt in ("}", ";", "void 0;", "return;", "return null;", "return undefined;"):
-                        violations.append({
-                            "file": fname,
-                            "line": f"{line_i} ... {next_stmt}",
-                            "fraud_type": "silent_failure_empty_catch",
-                            "description": "Multi-line empty catch block in JavaScript/TypeScript"
-                        })
-                    break
+                    if stmt in ("}", "};"):
+                        break
+                    body.append(stmt)
+                if len(body) == 1 and re.match(ret_regex, body[0]):
+                    violations.append({
+                        "file": fname,
+                        "line": f"{line_i} ... {body[0]}",
+                        "fraud_type": "unconditional_accept",
+                        "description": "Validation function unconditionally returns success"
+                    })
 
             # Function stub check (Python and JS/TS)
             is_py_func = re.match(r"^def\s+\w+\s*\(.*\)\s*:", line_i)
@@ -766,13 +1029,56 @@ def cmd_audit(args):
         print("ℹ️ Diff is empty. No changes detected to audit.")
         return 0
 
-    violations = scan_diff_text(combined_diff)
+    allow_files = tuple(getattr(args, "allow_file", None) or ())
+    if allow_files:
+        print(f"⚠️  Explicitly excluded from this audit: {', '.join(allow_files)}")
+
+    violations = scan_diff_text(combined_diff, allow_files=allow_files)
+
+    # A clean diff is not proof that the tests are strong. Require a current
+    # K-Mutant report with zero survivors before granting VERIFIED.
+    k_dir = get_kairos_dir(root)
+    kmutant = None
+    kmutant_path = k_dir / "kmutant_latest.json"
+    if kmutant_path.exists():
+        try:
+            kmutant = json.loads(kmutant_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            kmutant = None
+    mutation_ok = bool(kmutant) and kmutant.get("survived") == 0
 
     print("=================================================================")
     print("🛡️  KAIROS ADVERSARIAL AUDIT REPORT")
     print("=================================================================")
 
-    k_dir = get_kairos_dir(root)
+    if not violations and not mutation_ok:
+        reason = "no kmutant_latest.json found" if not kmutant else (
+            f"{kmutant.get('survived')} mutant(s) survived in {kmutant.get('target', '?')}"
+        )
+        audit_report = {
+            "verdict": "REPAIR",
+            "violations": [],
+            "violation_count": 0,
+            "mutation_gate": "FAILED",
+            "mutation_reason": reason,
+            "timestamp": datetime.now().isoformat(),
+            "base_branch": base_branch
+        }
+        try:
+            k_dir.mkdir(parents=True, exist_ok=True)
+            (k_dir / "audit_latest.json").write_text(json.dumps(audit_report, indent=2), encoding="utf-8")
+        except OSError as e:
+            print(f"⚠️  Could not persist audit report: {e}", file=sys.stderr)
+        state = load_state(root)
+        state["current_stage"] = "REPAIR_REQUIRED"
+        save_state(state, root)
+        print("VERDICT: [ 🟡 REPAIR ]")
+        print("• No diff fraud detected, but test strength was not proven.")
+        print(f"• Mutation gate: FAILED ({reason})")
+        print("• Run `kairos mutate <file> --test \"<cmd>\"` until zero mutants survive.")
+        print("=================================================================")
+        return 1
+
     audit_report = {
         "verdict": "VERIFIED" if not violations else "REFUTED",
         "violations": violations,
@@ -1280,34 +1586,43 @@ def cmd_status(args):
     mode = state.get("mode", "alpha").upper()
     budget = state.get("token_budget", 15000)
     consumed = state.get("total_tokens_consumed", 0)
+    measured = bool(state.get("measured_usage"))
     remaining = max(0, budget - consumed)
     pct_used = (consumed / budget * 100) if budget > 0 else 0
     change = state.get("active_change") or "None"
     worktree = state.get("active_worktree") or "None (In-place)"
 
-    header = f"⚡ [KAIROS | Stage: {stage} | Mode: {mode} | Tokens: {consumed:,}/{budget:,} ({pct_used:.1f}%) | Left: {remaining:,}]"
+    if measured:
+        header = (f"⚡ [KAIROS | Stage: {stage} | Mode: {mode} | "
+                  f"Spent: {consumed:,}/{budget:,} ({pct_used:.1f}%) | Left: {remaining:,}]")
+    else:
+        header = f"⚡ [KAIROS | Stage: {stage} | Mode: {mode} | Budget: {budget:,} | Spent: UNMEASURED]"
 
     if getattr(args, "header_only", False):
         print(header)
         return 0
 
     if getattr(args, "dashboard", False):
-        stages = ["IDLE", "CLASSIFIED", "RESEARCHING", "BRAINSTORMING", "SPECIFYING", "BUILDING", "AUDITING", "VERIFIED", "SHIPPED"]
+        stages = ["IDLE", "CLASSIFIED", "RESEARCHING", "BRAINSTORMING", "SPECIFYING",
+                  "BUILDING", "AUDITING", "VERIFIED", "SHIPPED",
+                  "REPAIR_REQUIRED", "ROLLED_BACK"]
         current_idx = stages.index(stage) if stage in stages else 0
         stage_pct = int(((current_idx + 1) / len(stages)) * 100)
 
         filled_stages = int((current_idx + 1) / len(stages) * 14)
         stage_bar = "█" * filled_stages + "░" * (14 - filled_stages)
 
-        token_ratio = min(1.0, consumed / budget) if budget > 0 else 0
+        token_ratio = min(1.0, consumed / budget) if (budget > 0 and measured) else 0
         filled_tok = int(token_ratio * 14)
         tok_bar = "█" * filled_tok + "░" * (14 - filled_tok)
+        token_line = (f"{pct_used:>5.1f}% ({consumed:,}/{budget:,} tok)" if measured
+                      else "UNMEASURED (no usage log imported)")
 
         print("\n┌──────────────────────────────────────────────────────────────┐")
         print(f"│ 🧭 KAIROS MISSION CONTROL DASHBOARD                         │")
         print("├──────────────────────────────────────────────────────────────┤")
         print(f"│ Stage: [{stage_bar}] {stage_pct:>3}%  ({stage:<10})      │")
-        print(f"│ Token: [{tok_bar}] {pct_used:>5.1f}% ({consumed:,}/{budget:,} tok) │")
+        print(f"│ Token: [{tok_bar}] {token_line:<37} │")
         print(f"│ Mode:  MODE {mode:<7}  Worktree: {Path(worktree).name:<18}    │")
         print(f"│ Change: {change[:48]:<52} │")
         print("└──────────────────────────────────────────────────────────────┘\n")
@@ -1322,26 +1637,96 @@ def cmd_status(args):
     print(f"• Active Mode:       MODE {mode}")
     print(f"• Active Change ID:  {change}")
     print(f"• Active Worktree:   {worktree}")
-    print(f"• Tokens Consumed:   {consumed:,} tokens")
+    print(f"• Tokens Consumed:   {f'{consumed:,} tokens (measured)' if measured else 'UNMEASURED (import a usage log)'}")
     print(f"• Token Budget Cap:  {budget:,} tokens")
     print(f"• Remaining Budget:  {remaining:,} tokens ({100 - pct_used:.1f}% remaining)")
     print("=================================================================")
     return 0
 
+def _load_usage_from_jsonl(path):
+    """Read real token usage from a harness JSONL log.
+
+    Supports the shapes seen in practice: top-level `usage`, nested `message.usage`,
+    and camelCase or snake_case keys. Returns totals plus the source hash.
+    """
+    import hashlib
+    totals = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0, "cost_usd": 0.0}
+    records = 0
+    skipped = 0
+    raw = Path(path).read_bytes()
+    for line in raw.decode("utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError as err:
+            # Count and surface skipped lines rather than discarding them silently.
+            skipped += 1
+            _ = err
+            continue
+        usage = obj.get("usage") or (obj.get("message") or {}).get("usage") or {}
+        if not isinstance(usage, dict) or not usage:
+            continue
+        def pick(*keys):
+            for k in keys:
+                v = usage.get(k)
+                if isinstance(v, (int, float)):
+                    return v
+            return 0
+        totals["input"] += pick("inputTokens", "input_tokens", "prompt_tokens")
+        totals["output"] += pick("outputTokens", "output_tokens", "completion_tokens")
+        totals["cache_read"] += pick("cacheReadTokens", "cache_read_input_tokens", "cache_read_tokens")
+        totals["cache_write"] += pick("cacheWriteTokens", "cache_creation_input_tokens", "cache_write_tokens")
+        totals["cost_usd"] += pick("costUsd", "cost_usd", "cost")
+        records += 1
+    totals["records"] = records
+    totals["skipped_lines"] = skipped
+    totals["source"] = str(path)
+    totals["source_sha256"] = hashlib.sha256(raw).hexdigest()
+    return totals
+
 def cmd_token(args):
     root = find_repo_root()
     state = load_state(root)
     action = args.action
-    if action == "add":
-        if args.count <= 0:
-            raise ValueError(f"Token count must be a positive integer, got: {args.count}")
-        state["total_tokens_consumed"] = state.get("total_tokens_consumed", 0) + args.count
+    if action == "import":
+        usage_file = getattr(args, "usage", None)
+        if not usage_file:
+            print("❌ --usage <log.jsonl> is required for `token import`.", file=sys.stderr)
+            return 1
+        path = Path(usage_file).expanduser()
+        if not path.is_file():
+            print(f"❌ Usage log not found: {path}", file=sys.stderr)
+            return 1
+        totals = _load_usage_from_jsonl(path)
+        if totals["records"] == 0:
+            print(f"❌ No token usage records found in {path}. Nothing imported.", file=sys.stderr)
+            return 1
+        active = totals["input"] + totals["output"]
+        state["total_tokens_consumed"] = active
+        state["measured_usage"] = {**totals, "active_tokens": active,
+                                   "imported_at": datetime.now().isoformat()}
         save_state(state, root)
-        print(f"✅ Added {args.count:,} tokens. Total consumed: {state['total_tokens_consumed']:,} tokens.")
+        print(f"✅ Imported {totals['records']} usage record(s) from {path.name}")
+        print(f"   input={totals['input']:,} output={totals['output']:,} "
+              f"cache_read={totals['cache_read']:,} cache_write={totals['cache_write']:,}")
+        print(f"   active tokens (input+output): {active:,}")
+        print(f"   cost: ${totals['cost_usd']:.4f}")
+        print(f"   source sha256: {totals['source_sha256'][:16]}…")
+        if totals["skipped_lines"]:
+            print(f"   ⚠️  {totals['skipped_lines']} malformed line(s) skipped")
+    elif action == "show":
+        usage = state.get("measured_usage")
+        if not usage:
+            print("UNMEASURED — no usage log imported. Run `kairos token import --usage <log.jsonl>`.")
+            return 0
+        print(json.dumps(usage, indent=2))
     elif action == "reset":
         state["total_tokens_consumed"] = 0
+        state.pop("measured_usage", None)
         save_state(state, root)
-        print("✅ Token counter reset to 0.")
+        print("✅ Token measurement reset. Status will report UNMEASURED until a log is imported.")
     elif action == "set-stage":
         state["current_stage"] = args.stage.upper()
         save_state(state, root)
@@ -1470,6 +1855,7 @@ def cmd_mutate(args):
 
     killed = 0
     survived = 0
+    timed_out = 0
 
     try:
         for idx, (mutant_content, desc) in enumerate(mutations_generated, 1):
@@ -1484,8 +1870,10 @@ def cmd_mutate(args):
                     survived += 1
                     print(f"  [{idx}/{len(mutations_generated)}] ⚠️  SURVIVED: {desc} (Weak Test!)")
             except subprocess.TimeoutExpired:
-                killed += 1
-                print(f"  [{idx}/{len(mutations_generated)}] 💀 KILLED (TIMEOUT): {desc}")
+                # A hanging mutant is not evidence that the test detected it. Counting
+                # it as killed would inflate the score with an infrastructure failure.
+                timed_out += 1
+                print(f"  [{idx}/{len(mutations_generated)}] ⏱️  TIMEOUT:  {desc} (not counted as killed)")
     finally:
         if bak_path.exists():
             shutil.copy2(bak_path, target_path)
@@ -1493,9 +1881,12 @@ def cmd_mutate(args):
         else:
             target_path.write_text(original_content, encoding="utf-8")
 
-    score = (killed / len(mutations_generated) * 100) if mutations_generated else 100
+    scored_runs = killed + survived
+    score = (killed / scored_runs * 100) if scored_runs else 100
     print("=================================================================")
-    print(f"🎯 K-MUTANT VERDICT: {killed}/{len(mutations_generated)} mutants killed ({score:.1f}% test strength)")
+    print(f"🎯 K-MUTANT VERDICT: {killed}/{scored_runs} mutants killed ({score:.1f}% test strength)")
+    if timed_out:
+        print(f"   {timed_out} mutant(s) timed out and are excluded from the score.")
 
     root = find_repo_root()
     k_dir = get_kairos_dir(root)
@@ -1503,9 +1894,10 @@ def cmd_mutate(args):
         "target": target_path.name,
         "killed": killed,
         "survived": survived,
+        "timed_out": timed_out,
         "total": len(mutations_generated),
         "score": round(score, 1),
-        "verdict": "VERIFIED" if survived == 0 else "WEAK_TESTS",
+        "verdict": "READY" if survived == 0 else "REPAIR",
         "timestamp": datetime.now().isoformat()
     }
     try:
@@ -1516,14 +1908,8 @@ def cmd_mutate(args):
     if survived > 0:
         print(f"⚠️ WARNING: {survived} mutant(s) survived! Harden your tests with stronger assertions.")
         return 1
-    else:
-        print("✅ 100% mutants killed. Tests are robust.")
-        return 0
-    print("-----------------------------------------------------------------")
-    print(f"🎯 MUTATION SCORE: {score:.1f}% (Killed: {killed} | Survived: {survived})")
-    print(f"🛡️  Source file [{target_path.name}] successfully restored.")
-    print("=================================================================")
-    return 0 if survived == 0 else 1
+    print("✅ 100% of scored mutants killed. Tests are robust.")
+    return 0
 
 # ---------------------------------------------------------------------------
 # MAIN CLI DISPATCHER
@@ -1556,6 +1942,8 @@ def main():
     p_audit.add_argument("--base", default="main", help="Base branch to diff against (default: main)")
     p_audit.add_argument("--worktree", default=None, help="Specific worktree path to audit")
     p_audit.add_argument("--root-only", action="store_true", help="Audit only repo root, ignoring active worktree")
+    p_audit.add_argument("--allow-file", action="append", default=[], metavar="PATH",
+                         help="Exclude a specific path from this audit (repeated; reported in the output)")
 
     # Archive
     p_arc = subparsers.add_parser("archive", help="Promote Delta Spec to living specs")
@@ -1571,9 +1959,10 @@ def main():
     p_stat.add_argument("--dashboard", action="store_true", help="Display visual terminal mission control dashboard")
 
     # Token management
-    p_tok = subparsers.add_parser("token", help="Manage token budget and telemetry")
-    p_tok.add_argument("action", choices=["add", "reset", "set-stage"], help="Token action")
-    p_tok.add_argument("count", nargs="?", type=int, default=0, help="Tokens to add")
+    p_tok = subparsers.add_parser("token", help="Import real token usage and manage the stage")
+    p_tok.add_argument("action", choices=["import", "show", "reset", "set-stage"], help="Token action")
+    p_tok.add_argument("--usage", default=None, metavar="LOG",
+                       help="Path to a harness JSONL usage log (required for `import`)")
     p_tok.add_argument("--stage", default="IDLE", help="Stage name for set-stage")
 
     # Rollback

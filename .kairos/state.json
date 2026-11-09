@@ -1,11 +1,11 @@
 {
   "version": "1.1.0",
   "created_at": "2026-11-07T18:52:44.276385",
-  "current_stage": "CLASSIFIED",
+  "current_stage": "REPAIR_REQUIRED",
   "active_change": null,
-  "mode": "gamma",
+  "mode": "beta",
   "active_worktree": null,
-  "token_budget": 180000,
+  "token_budget": 65000,
   "total_tokens_consumed": 0,
   "history": [
     {

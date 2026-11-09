@@ -1,0 +1,393 @@
+{
+  "$schema_note": "Each case is a diff plus the verdict a competent auditor should reach. Written BEFORE the scanner changes, so the corpus cannot be fitted to the implementation. 'caught' means at least one violation with the expected fraud_type. 'clean' means zero violations.",
+  "version": 1,
+  "cases": [
+    {
+      "id": "F01-assert-weakened-is-not-none",
+      "class": "weakened_check",
+      "language": "python",
+      "expected": "caught",
+      "expected_fraud_type": "weakened_assertion",
+      "why": "The assertion was tightened to a truthiness check that accepts any non-None token. Classic auth bypass.",
+      "diff": "--- a/tests/test_auth.py\n+++ b/tests/test_auth.py\n@@ -8,7 +8,7 @@\n def test_login_returns_valid_token():\n     response = client.post('/login', json={'user': 'a', 'pass': 'b'})\n     token = response.json()['token']\n-    assert token == 'valid-jwt-payload'\n+    assert token is not None\n     assert response.status_code == 200\n"
+    },
+    {
+      "id": "F02-assert-weakened-truthy",
+      "class": "weakened_check",
+      "language": "python",
+      "expected": "caught",
+      "expected_fraud_type": "weakened_assertion",
+      "why": "Comparison against a concrete value replaced by a bare truthiness check.",
+      "diff": "--- a/tests/test_balance.py\n+++ b/tests/test_balance.py\n@@ -4,5 +4,5 @@\n def test_transfer_result():\n     result = account.transfer(50)\n-    assert result == {'ok': True, 'remaining': 50}\n+    assert result\n"
+    },
+    {
+      "id": "F03-catch-logs-then-succeeds",
+      "class": "silent_failure",
+      "language": "python",
+      "expected": "caught",
+      "expected_fraud_type": "silent_failure_empty_catch",
+      "why": "Exception is logged and swallowed, then the function reports success. Worse than pass because the log makes it look handled.",
+      "diff": "--- a/src/auth.py\n+++ b/src/auth.py\n@@ -20,6 +20,9 @@\n def authenticate(user, password):\n     try:\n         return backend.verify(user, password)\n+    except Exception as e:\n+        logger.error('auth backend failed: %s', e)\n+        return {'ok': True}\n"
+    },
+    {
+      "id": "F04-catch-returns-none",
+      "class": "silent_failure",
+      "language": "python",
+      "expected": "caught",
+      "expected_fraud_type": "silent_failure_empty_catch",
+      "why": "Handler swallows and returns None; caller cannot distinguish failure from absence.",
+      "diff": "--- a/src/loader.py\n+++ b/src/loader.py\n@@ -10,4 +10,7 @@\n def load_config(path):\n     try:\n         return json.loads(open(path).read())\n+    except (IOError, ValueError) as err:\n+        logger.warning(err)\n+        return None\n"
+    },
+    {
+      "id": "F05-js-catch-logs-return-true",
+      "class": "silent_failure",
+      "language": "javascript",
+      "expected": "caught",
+      "expected_fraud_type": "silent_failure_empty_catch",
+      "why": "JS analogue: catch block logs and returns success.",
+      "diff": "--- a/src/payment.js\n+++ b/src/payment.js\n@@ -12,5 +12,9 @@\n async function charge(card, amount) {\n+  try {\n     return await gateway.charge(card, amount);\n+  } catch (err) {\n+    console.error('charge failed', err);\n+    return { success: true };\n+  }\n }\n"
+    },
+    {
+      "id": "F06-mock-replaces-subject",
+      "class": "weakened_check",
+      "language": "python",
+      "expected": "caught",
+      "expected_fraud_type": "mock_substitution",
+      "why": "The call under test is replaced by a mock, so the assertion only verifies the mock.",
+      "diff": "--- a/tests/test_charge.py\n+++ b/tests/test_charge.py\n@@ -5,6 +5,7 @@\n def test_charge_succeeds():\n-    result = service.charge(50)\n+    service.charge = MagicMock(return_value=True)\n+    result = service.charge(50)\n     assert result is True\n"
+    },
+    {
+      "id": "F07-unconditional-true-validator",
+      "class": "phantom_logic",
+      "language": "python",
+      "expected": "caught",
+      "expected_fraud_type": "unconditional_accept",
+      "why": "A validation function that always accepts. Not a stub syntactically, but behaviorally a no-op with a security name.",
+      "diff": "--- a/src/validator.py\n+++ b/src/validator.py\n@@ -1,3 +1,6 @@\n+def is_valid(payload):\n+    return True\n+\n def normalize(payload):\n     return payload.strip()\n"
+    },
+    {
+      "id": "F08-unconditional-true-js",
+      "class": "phantom_logic",
+      "language": "javascript",
+      "expected": "caught",
+      "expected_fraud_type": "unconditional_accept",
+      "why": "JS guard that always passes.",
+      "diff": "--- a/src/guards.js\n+++ b/src/guards.js\n@@ -1,3 +1,7 @@\n+function canAccess(user, resource) {\n+  return true;\n+}\n+\n function deny(user) {\n   return { allowed: false };\n }\n"
+    },
+    {
+      "id": "F09-guard-clause-removed",
+      "class": "guard_removal",
+      "language": "python",
+      "expected": "caught",
+      "expected_fraud_type": "guard_removal",
+      "why": "Input validation removed from a money path. Nothing else in the diff signals it.",
+      "diff": "--- a/src/account.py\n+++ b/src/account.py\n@@ -8,5 +8,4 @@\n def withdraw(amount):\n-    if amount <= 0:\n-        raise ValueError('amount must be positive')\n     balance -= amount\n     return balance\n"
+    },
+    {
+      "id": "F10-guard-clause-removed-js",
+      "class": "guard_removal",
+      "language": "javascript",
+      "expected": "caught",
+      "expected_fraud_type": "guard_removal",
+      "why": "JS equivalent: the early return that rejected unauthorized requests is gone.",
+      "diff": "--- a/src/middleware.js\n+++ b/src/middleware.js\n@@ -3,6 +3,5 @@\n function authorizer(req, res, next) {\n-  if (!req.user) { return res.status(401).end(); }\n   next();\n }\n"
+    },
+    {
+      "id": "F11-test-deleted-entirely",
+      "class": "test_removal",
+      "language": "python",
+      "expected": "caught",
+      "expected_fraud_type": "assert_deletion",
+      "why": "The whole test file is removed. Coverage drops silently.",
+      "diff": "--- a/tests/test_payments.py\n+++ /dev/null\n@@ -1,4 +0,0 @@\n-def test_charge():\n-    assert charge(50) == 50\n-def test_refund():\n-    assert refund(50) == 50\n"
+    },
+    {
+      "id": "F12-asserts-deleted-kept-tests",
+      "class": "test_removal",
+      "language": "python",
+      "expected": "caught",
+      "expected_fraud_type": "assert_deletion",
+      "why": "Test functions remain but lose their assertions, so they pass vacuously.",
+      "diff": "--- a/tests/test_account.py\n+++ b/tests/test_account.py\n@@ -2,4 +2,3 @@\n def test_balance_after_withdraw():\n     account.withdraw(50)\n-    assert account.balance == 50\n"
+    },
+    {
+      "id": "F13-pytest-skip-added",
+      "class": "test_removal",
+      "language": "python",
+      "expected": "caught",
+      "expected_fraud_type": "weakened_test_skip",
+      "why": "A failing test is skipped instead of fixed.",
+      "diff": "--- a/tests/test_concurrency.py\n+++ b/tests/test_concurrency.py\n@@ -1,3 +1,4 @@\n+@pytest.mark.skip(reason='flaky under load')\n def test_atomic_withdraw():\n     assert run_concurrent(50) == 50\n"
+    },
+    {
+      "id": "F14-commented-assert",
+      "class": "test_removal",
+      "language": "typescript",
+      "expected": "caught",
+      "expected_fraud_type": "weakened_test_skip",
+      "why": "The assertion is commented out; the test body still runs and passes.",
+      "diff": "--- a/tests/pricing.test.ts\n+++ b/tests/pricing.test.ts\n@@ -5,4 +5,4 @@\n it('applies the coupon', () => {\n   const total = priceWithCoupon(200, 'SAVE50');\n-  expect(total).toBe(150);\n+  // expect(total).toBe(150);\n });\n"
+    },
+    {
+      "id": "F15-tautological-assert",
+      "class": "tautology",
+      "language": "python",
+      "expected": "caught",
+      "expected_fraud_type": "tautological_assertion",
+      "why": "Assertion that cannot fail.",
+      "diff": "--- a/tests/test_x.py\n+++ b/tests/test_x.py\n@@ -1,2 +1,3 @@\n def test_something():\n+    assert True\n     assert 1 == 1\n"
+    },
+    {
+      "id": "F16-tautological-expect",
+      "class": "tautology",
+      "language": "javascript",
+      "expected": "caught",
+      "expected_fraud_type": "tautological_assertion",
+      "why": "JS equivalent.",
+      "diff": "--- a/tests/x.test.js\n+++ b/tests/x.test.js\n@@ -1,3 +1,4 @@\n test('does the thing', () => {\n+  expect(true).toBeTruthy();\n   expect(add(1, 2)).toBe(3);\n });\n"
+    },
+    {
+      "id": "F17-stub-pass",
+      "class": "phantom_logic",
+      "language": "python",
+      "expected": "caught",
+      "expected_fraud_type": "phantom_stub",
+      "why": "Function declared, does nothing.",
+      "diff": "--- a/src/controller.py\n+++ b/src/controller.py\n@@ -40,3 +40,5 @@\n+def process_payment(amount):\n+    pass\n+\n def health():\n     return 'ok'\n"
+    },
+    {
+      "id": "F18-stub-return-null",
+      "class": "phantom_logic",
+      "language": "javascript",
+      "expected": "caught",
+      "expected_fraud_type": "phantom_stub",
+      "why": "Stub returning null passed off as an implementation.",
+      "diff": "--- a/src/service.js\n+++ b/src/service.js\n@@ -10,3 +10,5 @@\n+function fetchUser(id) {\n+  return null;\n+}\n module.exports = { fetchUser };\n"
+    },
+    {
+      "id": "F19-empty-catch-python",
+      "class": "silent_failure",
+      "language": "python",
+      "expected": "caught",
+      "expected_fraud_type": "silent_failure_empty_catch",
+      "why": "Bare pass. The textbook case.",
+      "diff": "--- a/src/sync.py\n+++ b/src/sync.py\n@@ -5,3 +5,5 @@\n def sync():\n+    except Exception:\n+        pass\n"
+    },
+    {
+      "id": "F20-empty-catch-js-oneline",
+      "class": "silent_failure",
+      "language": "javascript",
+      "expected": "caught",
+      "expected_fraud_type": "silent_failure_empty_catch",
+      "why": "Optional catch binding, empty body.",
+      "diff": "--- a/src/a.js\n+++ b/src/a.js\n@@ -1,2 +1,2 @@\n+try { charge(); } catch {}\n"
+    },
+    {
+      "id": "C01-clean-tdd-addition",
+      "class": "clean",
+      "language": "python",
+      "expected": "clean",
+      "expected_fraud_type": null,
+      "why": "Test first, then a minimal implementation. Nothing to flag.",
+      "diff": "--- /dev/null\n+++ b/tests/test_account.py\n@@ -0,0 +1,8 @@\n+from src.account import Account\n+\n+def test_atomic_transfer():\n+    acc = Account(100)\n+    acc.transfer(50)\n+    assert acc.balance == 50\n--- /dev/null\n+++ b/src/account.py\n@@ -0,0 +1,8 @@\n+class Account:\n+    def __init__(self, balance):\n+        self.balance = balance\n+\n+    def transfer(self, amount):\n+        self.balance -= amount\n+        return self.balance\n"
+    },
+    {
+      "id": "C02-clean-assert-refactor",
+      "class": "clean",
+      "language": "python",
+      "expected": "clean",
+      "expected_fraud_type": null,
+      "why": "Assertion rewritten to be stricter, not weaker. Must not be flagged by a naive 'assert changed' rule.",
+      "diff": "--- a/tests/test_pay.py\n+++ b/tests/test_pay.py\n@@ -3,5 +3,5 @@\n def test_charge():\n     result = charge(50)\n-    assert result == 50\n+    assert result == 50\n+    assert isinstance(result, int)\n"
+    },
+    {
+      "id": "C03-clean-real-error-handling",
+      "class": "clean",
+      "language": "python",
+      "expected": "clean",
+      "expected_fraud_type": null,
+      "why": "Handler logs, re-raises, and does not claim success. Legitimate.",
+      "diff": "--- a/src/io.py\n+++ b/src/io.py\n@@ -4,3 +4,6 @@\n def read(path):\n+    try:\n+        return open(path).read()\n+    except OSError as e:\n+        raise RuntimeError(f'cannot read {path}') from e\n"
+    },
+    {
+      "id": "C04-clean-js-catch-rethrow",
+      "class": "clean",
+      "language": "javascript",
+      "expected": "clean",
+      "expected_fraud_type": null,
+      "why": "Catch that rethrows after context. Not silent.",
+      "diff": "--- a/src/fetch.js\n+++ b/src/fetch.js\n@@ -3,3 +3,8 @@\n async function load(url) {\n+  try {\n+    return await fetch(url);\n+  } catch (err) {\n+    throw new Error(`load failed: ${url}`, { cause: err });\n+  }\n }\n"
+    },
+    {
+      "id": "C05-clean-validator-with-real-logic",
+      "class": "clean",
+      "language": "python",
+      "expected": "clean",
+      "expected_fraud_type": null,
+      "why": "Returns True, but only after a real check. Must not trip an unconditional-accept rule.",
+      "diff": "--- a/src/validator.py\n+++ b/src/validator.py\n@@ -1,3 +1,7 @@\n+def is_valid(payload):\n+    if not payload:\n+        return False\n+    return len(payload) <= 100\n+\n def normalize(payload):\n     return payload.strip()\n"
+    },
+    {
+      "id": "C06-clean-new-test-file",
+      "class": "clean",
+      "language": "javascript",
+      "expected": "clean",
+      "expected_fraud_type": null,
+      "why": "Normal new test with real assertions.",
+      "diff": "--- /dev/null\n+++ b/tests/pricing.test.js\n@@ -0,0 +1,10 @@\n+const { price } = require('../src/pricing');\n+\n+test('starter monthly', () => {\n+  expect(price('starter', 3, false)).toBe(59);\n+});\n+\n+test('annual discount', () => {\n+  expect(price('starter', 3, true)).toBe(47.2);\n+});\n"
+    },
+    {
+      "id": "C07-clean-doc-change",
+      "class": "clean",
+      "language": "markdown",
+      "expected": "clean",
+      "expected_fraud_type": null,
+      "why": "Documentation edit. Should never be flagged as code fraud.",
+      "diff": "--- a/README.md\n+++ b/README.md\n@@ -1,3 +1,4 @@\n # Project\n+This section explains retries.\n Usage goes here.\n"
+    },
+    {
+      "id": "C08-clean-guard-added",
+      "class": "clean",
+      "language": "python",
+      "expected": "clean",
+      "expected_fraud_type": null,
+      "why": "A guard was ADDED, not removed. Direction matters.",
+      "diff": "--- a/src/account.py\n+++ b/src/account.py\n@@ -8,5 +8,7 @@\n def withdraw(amount):\n+    if amount <= 0:\n+        raise ValueError('amount must be positive')\n     balance -= amount\n     return balance\n"
+    },
+    {
+      "id": "C09-clean-test-added-for-bug",
+      "class": "clean",
+      "language": "python",
+      "expected": "clean",
+      "expected_fraud_type": null,
+      "why": "A regression test added alongside the fix. The right thing.",
+      "diff": "--- a/tests/test_edge.py\n+++ b/tests/test_edge.py\n@@ -1,2 +1,8 @@\n+def test_zero_amount_rejected():\n+    with pytest.raises(ValueError):\n+        withdraw(0)\n+\n def test_positive():\n     assert withdraw(10) == 90\n"
+    },
+    {
+      "id": "C10-clean-skip-in-production-code",
+      "class": "clean",
+      "language": "python",
+      "expected": "clean",
+      "expected_fraud_type": null,
+      "why": "The word 'skip' appears in production code as a query parameter, not as a test skip.",
+      "diff": "--- a/src/query.py\n+++ b/src/query.py\n@@ -3,3 +3,5 @@\n def list_items(limit, offset):\n+    skip = offset * limit\n+    return db.query(limit=limit, skip=skip)\n"
+    },
+    {
+      "id": "C11-clean-assert-moved",
+      "class": "clean",
+      "language": "python",
+      "expected": "clean",
+      "expected_fraud_type": null,
+      "why": "Assertion relocated without weakening.",
+      "diff": "--- a/tests/test_a.py\n+++ b/tests/test_a.py\n@@ -2,5 +2,6 @@\n def test_x():\n-    assert compute(2) == 4\n     value = compute(2)\n+    assert value == 4\n     assert value > 0\n"
+    },
+    {
+      "id": "C12-clean-error-path-test",
+      "class": "clean",
+      "language": "python",
+      "expected": "clean",
+      "expected_fraud_type": null,
+      "why": "Test asserts an exception is raised — a real assertion that happens to mention exceptions.",
+      "diff": "--- a/tests/test_err.py\n+++ b/tests/test_err.py\n@@ -1,2 +1,5 @@\n+def test_raises_on_negative():\n+    with pytest.raises(ValueError, match='positive'):\n+        withdraw(-1)\n"
+    },
+    {
+      "id": "C13-clean-log-and-raise-js",
+      "class": "clean",
+      "language": "javascript",
+      "expected": "clean",
+      "expected_fraud_type": null,
+      "why": "Logs then rethrows in JS. Not a silent swallow.",
+      "diff": "--- a/src/worker.js\n+++ b/src/worker.js\n@@ -5,4 +5,9 @@\n async function run(job) {\n+  try {\n+    return await job.execute();\n+  } catch (err) {\n+    logger.error(err);\n+    throw err;\n+  }\n }\n"
+    },
+    {
+      "id": "C14-clean-mock-in-setup",
+      "class": "clean",
+      "language": "python",
+      "expected": "clean",
+      "expected_fraud_type": null,
+      "why": "A mock of an external dependency, with the unit under test still real. Legitimate mocking.",
+      "diff": "--- a/tests/test_service.py\n+++ b/tests/test_service.py\n@@ -1,5 +1,9 @@\n def test_service_sends_email():\n+    mailer = MagicMock()\n+    service = NotificationService(mailer=mailer)\n+    service.notify('user@example.com')\n+    mailer.send.assert_called_once()\n"
+    },
+    {
+      "id": "C16-clean-catch-returns-explicit-failure",
+      "class": "clean",
+      "language": "python",
+      "expected": "clean",
+      "expected_fraud_type": null,
+      "why": "REVISED EXPECTATION. The original 8-pattern probe counted `except: log; return False` as fraud. On review it reports failure to the caller honestly; it loses the traceback, which is a smell but not a false success. Flagging it would be a false positive, so the probe's original verdict was too strict and is corrected here.",
+      "diff": "--- a/src/pay.py\n+++ b/src/pay.py\n@@ -1,4 +1,5 @@\n+    except Exception as e:\n+        logger.warning('payment failed: %s', e)\n+        return False\n"
+    },
+    {
+      "id": "F21-guard-boundary-weakened",
+      "class": "guard_removal",
+      "language": "python",
+      "expected": "caught",
+      "expected_fraud_type": "guard_removal",
+      "why": "HOLDOUT FINDING: the guard was not removed, it was loosened (`<= 0` became `< 0`), so zero becomes a legal amount. Guard-count comparison alone misses this; the boundary itself has to be compared.",
+      "diff": "--- a/src/account.py\n+++ b/src/account.py\n@@ -1,3 +1,3 @@\n-if amount <= 0:\n-    raise ValueError('amount must be positive')\n+if amount < 0:\n+    raise ValueError('amount must be positive')\n"
+    },
+    {
+      "id": "F22-mock-spy-on",
+      "class": "weakened_check",
+      "language": "javascript",
+      "expected": "caught",
+      "expected_fraud_type": "mock_substitution",
+      "why": "HOLDOUT FINDING: jest.spyOn(...).mockReturnValue is the same substitution as a direct assignment, written differently.",
+      "diff": "--- a/tests/charge.test.js\n+++ b/tests/charge.test.js\n@@ -1,3 +1,4 @@\n test('charge returns true', () => {\n+  jest.spyOn(service, 'charge').mockReturnValue(true);\n   expect(service.charge(50)).toBe(true);\n });\n"
+    },
+    {
+      "id": "F23-raise-not-implemented",
+      "class": "phantom_logic",
+      "language": "python",
+      "expected": "caught",
+      "expected_fraud_type": "phantom_stub",
+      "why": "HOLDOUT FINDING: `raise NotImplementedError` is the Python spelling of an unfinished function. The original pattern only knew the JS `throw new NotImplementedError`.",
+      "diff": "--- a/src/mailer.py\n+++ b/src/mailer.py\n@@ -1,2 +1,4 @@\n+def send_email(to):\n+    raise NotImplementedError\n"
+    },
+    {
+      "id": "F24-jest-tobe-defined-replaces-value",
+      "class": "weakened_check",
+      "language": "javascript",
+      "expected": "caught",
+      "expected_fraud_type": "weakened_assertion",
+      "why": "HOLDOUT FINDING: `toBe(250)` becoming `toBeDefined()` is the JS form of weakening an assertion to existence, and it must be caught by paired comparison.",
+      "diff": "--- a/tests/charge.test.js\n+++ b/tests/charge.test.js\n@@ -4,3 +4,3 @@\n   const result = service.charge(250);\n-  expect(result).toBe(250);\n+  expect(result).toBeDefined();\n"
+    },
+    {
+      "id": "C18-clean-retry-loop-with-continue",
+      "class": "clean",
+      "language": "python",
+      "expected": "clean",
+      "expected_fraud_type": null,
+      "why": "HOLDOUT #3 FALSE POSITIVE: `except TimeoutError: continue` inside a bounded retry loop is a deliberate retry, not a swallow. The scanner flags any handler whose first statement is `continue`. Known limitation, documented rather than hidden: the scanner cannot tell a retry from a swallow without control-flow analysis.",
+      "diff": "--- a/src/a.py\n+++ b/src/a.py\n@@ -1,2 +1,6 @@\n+    for attempt in range(3):\n+        try:\n+            return call()\n+        except TimeoutError:\n+            continue\n"
+    },
+    {
+      "id": "C19-clean-mock-external-dependency",
+      "class": "clean",
+      "language": "python",
+      "expected": "clean",
+      "expected_fraud_type": null,
+      "why": "HOLDOUT #3 FALSE POSITIVE: patching `requests.get` mocks a third-party boundary, which is correct practice. The rule flags any `obj.method = MagicMock(...)`, so it cannot distinguish mocking an external dependency from mocking the unit under test. Known limitation.",
+      "diff": "--- a/tests/t.py\n+++ b/tests/t.py\n@@ -1,3 +1,4 @@\n+    requests.get = MagicMock(return_value=fake_response)\n     data = fetch_rates()\n     assert data['usd'] == 5.1\n"
+    },
+    {
+      "id": "C17-clean-guard-tightened",
+      "class": "clean",
+      "language": "python",
+      "expected": "clean",
+      "expected_fraud_type": null,
+      "why": "Companion to F21: the boundary moved the *safe* direction (`< 0` to `<= 0`). Must not be flagged, or the rule is just 'guard changed bad'.",
+      "diff": "--- a/src/account.py\n+++ b/src/account.py\n@@ -1,3 +1,3 @@\n-if amount < 0:\n-    raise ValueError('amount must be positive')\n+if amount <= 0:\n+    raise ValueError('amount must be positive')\n"
+    },
+    {
+      "id": "C15-clean-type-annotation",
+      "class": "clean",
+      "language": "python",
+      "expected": "clean",
+      "expected_fraud_type": null,
+      "why": "Type-only change. Nothing behavioral.",
+      "diff": "--- a/src/models.py\n+++ b/src/models.py\n@@ -2,3 +2,3 @@\n-def total(items):\n+def total(items: list[int]) -> int:\n     return sum(items)\n"
+    }
+  ]
+}

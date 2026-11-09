@@ -1,6 +1,7 @@
 import unittest
 import sys
 import os
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -162,14 +163,106 @@ class TestKairosFeatures(unittest.TestCase):
                 if p.is_dir():
                     shutil.rmtree(p)
 
-    def test_token_add_rejects_negative_values(self):
-        """ROUND 2 RISK-01: cmd_token add must reject negative values."""
-        class MockTokenArgs:
-            action = "add"
-            count = -50000
-            stage = None
-        with self.assertRaises(ValueError):
-            cmd_token(MockTokenArgs())
+    def test_token_import_reads_real_usage_and_rejects_empty_log(self):
+        """v1.2: token counts must come from a real usage log, never a manual increment.
+
+        `token add` was removed because an agent incrementing its own counter is the
+        exact 'false completion' this project claims to detect.
+        """
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "usage.jsonl"
+            log.write_text(
+                '{"usage": {"inputTokens": 1000, "outputTokens": 250, "cacheReadTokens": 5000, "costUsd": 0.01}}\n'
+                '{"message": {"usage": {"input_tokens": 2000, "output_tokens": 500}}}\n',
+                encoding="utf-8",
+            )
+
+            class ImportArgs:
+                action = "import"
+                usage = str(log)
+                stage = None
+
+            before = load_state(REPO_ROOT)
+            try:
+                self.assertEqual(cmd_token(ImportArgs()), 0)
+                state = load_state(REPO_ROOT)
+                self.assertEqual(state["total_tokens_consumed"], 3750,
+                                 "active tokens must be input+output from the log")
+                self.assertEqual(state["measured_usage"]["records"], 2)
+                self.assertEqual(state["measured_usage"]["input"], 3000)
+                self.assertIn("source_sha256", state["measured_usage"])
+            finally:
+                save_state(before, REPO_ROOT)
+
+            empty = Path(tmp) / "empty.jsonl"
+            empty.write_text('{"type": "message"}\n', encoding="utf-8")
+
+            class EmptyArgs:
+                action = "import"
+                usage = str(empty)
+                stage = None
+
+            self.assertNotEqual(cmd_token(EmptyArgs()), 0,
+                                "an import with no usage records must fail, not silently report zero")
+
+    def test_audit_requires_mutation_evidence_before_verified(self):
+        """v1.2: a clean diff alone must not grant VERIFIED. Test strength must be proven."""
+        import tempfile
+        k_dir = get_kairos_dir(REPO_ROOT)
+        kmutant = k_dir / "kmutant_latest.json"
+        backup = kmutant.read_bytes() if kmutant.exists() else None
+        before = load_state(REPO_ROOT)
+        try:
+            if kmutant.exists():
+                kmutant.unlink()
+            with tempfile.TemporaryDirectory() as tmp:
+                repo = Path(tmp)
+                subprocess.run(["git", "init", "-q", "-b", "main"], cwd=repo, check=True)
+                subprocess.run(["git", "config", "user.email", "t@example.com"], cwd=repo, check=True)
+                subprocess.run(["git", "config", "user.name", "t"], cwd=repo, check=True)
+                (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
+                subprocess.run(["git", "add", "."], cwd=repo, check=True)
+                subprocess.run(["git", "commit", "-qm", "init"], cwd=repo, check=True)
+                (repo / "b.py").write_text("def ok():\n    return 1\n", encoding="utf-8")
+                subprocess.run(["git", "add", "."], cwd=repo, check=True)
+
+                class Args:
+                    base = "main"
+                    worktree = str(repo)
+                    root_only = False
+                    allow_file = []
+
+                prev = os.getcwd()
+                os.chdir(repo)
+                try:
+                    code = cmd_audit(Args())
+                finally:
+                    os.chdir(prev)
+                self.assertNotEqual(code, 0,
+                                    "audit granted VERIFIED with no mutation report present")
+                report = json.loads((repo / ".kairos" / "audit_latest.json").read_text(encoding="utf-8"))
+                self.assertEqual(report["verdict"], "REPAIR")
+                self.assertEqual(report["mutation_gate"], "FAILED")
+        finally:
+            if backup is not None:
+                kmutant.write_bytes(backup)
+            elif kmutant.exists():
+                kmutant.unlink()
+            save_state(before, REPO_ROOT)
+
+    def test_dial_force_beta_overrides_gamma_keyword(self):
+        """v1.2: --force-beta must win over a gamma keyword in the description."""
+        class Args:
+            description = ["adjust", "the", "token", "label", "css", "button", "padding"]
+            force_gamma = False
+            force_beta = True
+        before = load_state(REPO_ROOT)
+        try:
+            self.assertEqual(cmd_dial(Args()), 0)
+            self.assertEqual(load_state(REPO_ROOT)["mode"], "beta")
+        finally:
+            save_state(before, REPO_ROOT)
 
     def test_diff_scanner_catches_focused_tests_dot_only(self):
         """ROUND 2 RISK-03.1: it.only and describe.only silence the entire suite and must be blocked."""
