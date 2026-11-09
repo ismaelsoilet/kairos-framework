@@ -165,6 +165,51 @@ class TestResearch(unittest.TestCase):
         self.assertIsNone(_repo_slug("https://gitlab.com/a/b"))
 
 
+class TestMonorepo(unittest.TestCase):
+    """The first real project was a monorepo with manifests in backend/ and
+    frontend/. Scanning only the root reported 'no manifest', which reads as
+    'nothing to check' when there were 128 packages across three subprojects."""
+
+    def _tree(self, tmp):
+        root = Path(tmp)
+        (root / "backend").mkdir()
+        (root / "frontend").mkdir()
+        (root / "node_modules" / "junk").mkdir(parents=True)
+        (root / "backend" / "package.json").write_text(
+            json.dumps({"dependencies": {"express": "^4.0.0"}}), encoding="utf-8")
+        (root / "frontend" / "package.json").write_text(
+            json.dumps({"dependencies": {"vue": "^3.0.0"}}), encoding="utf-8")
+        (root / "requirements.txt").write_text("requests==2.31.0\n", encoding="utf-8")
+        (root / "node_modules" / "junk" / "package.json").write_text(
+            json.dumps({"dependencies": {"should-not-appear": "1.0.0"}}), encoding="utf-8")
+        return root
+
+    def test_finds_manifests_in_subprojects(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._tree(tmp)
+            items = parse_manifest(root)
+            names = {i[1] for i in items}
+            self.assertIn("express", names)
+            self.assertIn("vue", names)
+            self.assertIn("requests", names)
+
+    def test_skips_node_modules(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._tree(tmp)
+            names = {i[1] for i in parse_manifest(root)}
+            self.assertNotIn("should-not-appear", names)
+
+    def test_source_shows_which_subproject(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._tree(tmp)
+            sources = {i[1]: i[3] for i in parse_manifest(root)}
+            self.assertEqual(sources["express"], "backend/package.json")
+            self.assertEqual(sources["vue"], "frontend/package.json")
+
+
 class TestNoHardcodedKnowledge(unittest.TestCase):
     """The previous scout shipped a list of 'known breaking changes'. It already
     said Next 15 while the registry said 16.4.x. This asserts the module has no

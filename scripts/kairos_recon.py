@@ -74,53 +74,94 @@ def _gap(declared, latest):
     return "current"
 
 
+def _find_manifests(root, max_depth=3):
+    """Locate manifests at the root and in immediate subprojects.
+
+    The first real project this ran against was a monorepo with the manifests in
+    `backend/` and `frontend/`; looking only at the root found nothing and
+    reported "no manifest", which reads as "nothing to check" when in fact there
+    were two dependency graphs.
+    """
+    root = Path(root)
+    found = []
+    skip = {"node_modules", ".git", "dist", "build", ".venv", "venv", "vendor",
+            "target", ".next", "coverage", "__pycache__"}
+    names = ("package.json", "requirements.txt", "requirements-dev.txt",
+             "pyproject.toml", "Cargo.toml")
+
+    for depth in range(max_depth + 1):
+        bases = [root] if depth == 0 else [p for p in root.glob("/".join(["*"] * depth)) if p.is_dir()]
+        for base in bases:
+            if any(part in skip for part in base.relative_to(root).parts):
+                continue
+            for name in names:
+                if (base / name).is_file():
+                    found.append((base.relative_to(root) or Path("."), name))
+    return sorted(set(found))
+
+
 def parse_manifest(root):
-    """Return [(ecosystem, name, declared_version, source_file)]."""
+    """Return [(ecosystem, name, declared_version, source_file)].
+
+    The source file carries the subproject path, so a monorepo shows which of its
+    packages a gap belongs to.
+    """
     out = []
     root = Path(root)
 
-    pkg = root / "package.json"
-    if pkg.is_file():
-        try:
-            data = json.loads(pkg.read_text(encoding="utf-8"))
+    for subdir, fname in _find_manifests(root):
+        base = root / subdir if str(subdir) != "." else root
+        label = fname if str(subdir) == "." else f"{subdir}/{fname}"
+        path = base / fname
+
+        if fname == "package.json":
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (ValueError, OSError):
+                continue
             for section in ("dependencies", "devDependencies", "peerDependencies"):
                 for name, ver in (data.get(section) or {}).items():
-                    out.append(("npm", name, _clean_version(ver), "package.json"))
-        except (ValueError, OSError):
-            pass
+                    out.append(("npm", name, _clean_version(ver), label))
 
-    for fname in ("requirements.txt", "requirements-dev.txt"):
-        req = root / fname
-        if req.is_file():
-            for line in req.read_text(encoding="utf-8", errors="replace").splitlines():
+        elif fname.startswith("requirements"):
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            for line in text.splitlines():
                 line = line.strip()
                 if not line or line.startswith("#") or line.startswith("-"):
                     continue
                 m = re.match(r"^([A-Za-z0-9_.\-]+)\s*(?:[=<>!~]=?\s*([^;#\s]+))?", line)
                 if m:
-                    out.append(("pypi", m.group(1), _clean_version(m.group(2)), fname))
+                    out.append(("pypi", m.group(1), _clean_version(m.group(2)), label))
 
-    pyproj = root / "pyproject.toml"
-    if pyproj.is_file():
-        text = pyproj.read_text(encoding="utf-8", errors="replace")
-        for m in re.finditer(r'["\']([A-Za-z0-9_.\-]+)\s*(?:[=<>!~]=?\s*([^"\']+))?["\']', text):
-            name = m.group(1)
-            if name.lower() in ("python", "readme", "license"):
+        elif fname == "pyproject.toml":
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
                 continue
-            out.append(("pypi", name, _clean_version(m.group(2)), "pyproject.toml"))
+            for m in re.finditer(r'["\']([A-Za-z0-9_.\-]+)\s*(?:[=<>!~]=?\s*([^"\']+))?["\']', text):
+                name = m.group(1)
+                if name.lower() in ("python", "readme", "license", "requires-python"):
+                    continue
+                out.append(("pypi", name, _clean_version(m.group(2)), label))
 
-    cargo = root / "Cargo.toml"
-    if cargo.is_file():
-        text = cargo.read_text(encoding="utf-8", errors="replace")
-        for m in re.finditer(r'^([A-Za-z0-9_\-]+)\s*=\s*["\']([^"\']+)["\']', text, re.MULTILINE):
-            if m.group(1) in ("name", "version", "edition", "license", "edition"):
+        elif fname == "Cargo.toml":
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
                 continue
-            out.append(("crates", m.group(1), _clean_version(m.group(2)), "Cargo.toml"))
+            for m in re.finditer(r'^([A-Za-z0-9_\-]+)\s*=\s*["\']([^"\']+)["\']', text, re.MULTILINE):
+                if m.group(1) in ("name", "version", "edition", "license"):
+                    continue
+                out.append(("crates", m.group(1), _clean_version(m.group(2)), label))
 
-    # De-duplicate, keeping the first declaration seen.
+    # De-duplicate on (ecosystem, name, source): the same package in two
+    # subprojects is two facts, not a duplicate.
     seen, unique = set(), []
     for item in out:
-        key = (item[0], item[1])
+        key = (item[0], item[1], item[3])
         if key not in seen:
             seen.add(key)
             unique.append(item)
