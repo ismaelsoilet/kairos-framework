@@ -1101,7 +1101,10 @@ def cmd_audit(args):
     active_wt = getattr(args, "worktree", None) or state.get("active_worktree")
     if active_wt and not getattr(args, "root_only", False):
         wt_path = Path(active_wt).resolve()
-        if wt_path.exists():
+        # Only audit the worktree separately when it is genuinely a different
+        # tree. Passing --worktree pointing at the repo itself audited the same
+        # files twice, and every finding was reported in duplicate.
+        if wt_path.exists() and wt_path != Path(root).resolve():
             targets_to_audit.append(("active_worktree", wt_path))
 
     targets_to_audit.append(("repo_root", root))
@@ -1251,6 +1254,16 @@ def cmd_audit(args):
         state = load_state(root)
         state["current_stage"] = "REPAIR_REQUIRED"
         save_state(state, root)
+        # Persist the refutation too. A verdict that leaves no artifact is the
+        # one you cannot review later, and finding a fraud is exactly when the
+        # evidence matters most.
+        try:
+            k_dir = get_kairos_dir(root)
+            k_dir.mkdir(parents=True, exist_ok=True)
+            (k_dir / "audit_latest.json").write_text(
+                json.dumps(audit_report, indent=2), encoding="utf-8")
+        except OSError as e:
+            print(f"⚠️  Could not persist audit report: {e}", file=sys.stderr)
         print("VERDICT: [ ❌ REFUTED - FRAUD OR WEAKENED CHECKS DETECTED ]")
         print(f"Found {len(violations)} suspicious pattern(s):\n")
         for idx, v in enumerate(violations, 1):

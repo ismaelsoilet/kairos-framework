@@ -346,11 +346,51 @@ deleted file mode 100644
         self.assertEqual(exit_code, 0)
 
     def test_update_executes_health_check(self):
-        """Test that kairos update can check upstream remote."""
-        class MockArgs:
-            skip_self_test = True
-        exit_code = cmd_update(MockArgs())
-        self.assertEqual(exit_code, 0)
+        """`kairos update` against a real (local) remote, without network.
+
+        The previous version called cmd_update against this repository, so it ran
+        `git fetch` and `git pull` on the real origin and copied files into
+        ~/.gemini. It passed or failed depending on whether the local clone
+        happened to be behind. A test that depends on the state of a remote is not
+        testing the code, it is testing the checkout.
+        """
+        import tempfile
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            # A bare "remote" next to the working clone, both local.
+            remote = tmp / "remote.git"
+            work = tmp / "work"
+            subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(remote)], check=True)
+            work.mkdir()
+            for cmd in (["git", "init", "-q", "-b", "main"],
+                        ["git", "config", "user.email", "t@example.com"],
+                        ["git", "config", "user.name", "t"]):
+                subprocess.run(cmd, cwd=work, check=True)
+            (work / "plugin.json").write_text(
+                json.dumps({"name": "kairos", "id": "kairos-framework"}), encoding="utf-8")
+            (work / "README.md").write_text("# test\n", encoding="utf-8")
+            subprocess.run(["git", "add", "-A"], cwd=work, check=True)
+            subprocess.run(["git", "commit", "-qm", "init"], cwd=work, check=True)
+            subprocess.run(["git", "remote", "add", "origin", str(remote)], cwd=work, check=True)
+            subprocess.run(["git", "push", "-q", "-u", "origin", "main"], cwd=work, check=True)
+
+            class MockArgs:
+                skip_self_test = True
+
+            prev = os.getcwd()
+            os.chdir(work)
+            try:
+                # Path.home() is redirected so no file is written outside the tmp dir.
+                with mock.patch("pathlib.Path.home", return_value=tmp):
+                    exit_code = cmd_update(MockArgs())
+            finally:
+                os.chdir(prev)
+
+            self.assertEqual(exit_code, 0, "update failed against an in-sync local remote")
+            self.assertFalse((tmp / ".gemini").exists(),
+                             "update wrote to the global plugin path despite it not existing")
 
     def test_lesson_add_and_list(self):
         """Test that kairos lesson can record a new lesson and list existing ones."""
@@ -615,22 +655,77 @@ deleted file mode 100644
             self.assertIn("mode", state)
 
     def test_audit_catches_untracked_files_fraud(self):
-        """ROUND 3 FIX-11: Untracked new files with test frauds must be audited and blocked."""
-        orig_state = load_state(REPO_ROOT)
-        temp_file = REPO_ROOT / "tests" / "test_untracked_probe.py"
-        try:
-            bad_content = "import pytest\n@" + "pytest.mark.skip\ndef test_bad():\n    pass\n"
-            temp_file.write_text(bad_content, encoding="utf-8")
+        """Untracked new files with test frauds must be audited and blocked.
+
+        The previous version wrote the probe file into this repository, which
+        meant a failure mid-test left a fraudulent file in the working tree, and
+        a concurrent run would see it. Now the whole scenario lives in a temp repo.
+        """
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            subprocess.run(["git", "init", "-q", "-b", "main"], cwd=repo, check=True)
+            subprocess.run(["git", "config", "user.email", "t@example.com"], cwd=repo, check=True)
+            subprocess.run(["git", "config", "user.name", "t"], cwd=repo, check=True)
+            (repo / "app.py").write_text("x = 1\n", encoding="utf-8")
+            subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-qm", "init"], cwd=repo, check=True)
+
+            # Untracked fraud, never added to the index.
+            bad = "import pytest\n@" + "pytest.mark.skip\ndef test_bad():\n    pass\n"
+            (repo / "test_untracked_probe.py").write_text(bad, encoding="utf-8")
+
             class MockAuditArgs:
                 base = "main"
-                worktree = None
-                root_only = True
-            exit_code = cmd_audit(MockAuditArgs())
+                worktree = str(repo)
+                root_only = False
+                allow_file = []
+                enable_rule = []
+
+            prev = os.getcwd()
+            os.chdir(repo)
+            try:
+                exit_code = cmd_audit(MockAuditArgs())
+            finally:
+                os.chdir(prev)
+
             self.assertNotEqual(exit_code, 0, "Untracked fraud file was silently ignored by audit!")
-        finally:
-            if temp_file.exists():
-                temp_file.unlink()
-            save_state(orig_state, REPO_ROOT)
+            self.assertFalse((REPO_ROOT / "test_untracked_probe.py").exists(),
+                             "the probe file leaked into the real repository")
+
+    def test_audit_does_not_duplicate_findings_when_worktree_is_repo_root(self):
+        """Passing --worktree pointing at the repository itself audited the same
+        files twice, so every finding appeared in duplicate. One file, one flag."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            subprocess.run(["git", "init", "-q", "-b", "main"], cwd=repo, check=True)
+            subprocess.run(["git", "config", "user.email", "t@example.com"], cwd=repo, check=True)
+            subprocess.run(["git", "config", "user.name", "t"], cwd=repo, check=True)
+            (repo / "app.py").write_text("x = 1\n", encoding="utf-8")
+            subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-qm", "init"], cwd=repo, check=True)
+            (repo / "test_probe.py").write_text(
+                "import pytest\n@pytest.mark.skip\ndef test_bad():\n    pass\n", encoding="utf-8")
+
+            class MockAuditArgs:
+                base = "main"
+                worktree = str(repo)   # same directory as the repo
+                root_only = False
+                allow_file = []
+                enable_rule = []
+
+            prev = os.getcwd()
+            os.chdir(repo)
+            try:
+                cmd_audit(MockAuditArgs())
+                report = json.loads((repo / ".kairos" / "audit_latest.json").read_text(encoding="utf-8"))
+            finally:
+                os.chdir(prev)
+
+            probe = [v for v in report["violations"] if v["file"] == "test_probe.py"]
+            self.assertEqual(len(probe), 1,
+                             f"the same untracked file was reported {len(probe)} times")
 
     def test_worktree_create_and_remove_lifecycle(self):
         """v1.2: worktree create/remove had no test at all. Exiting 0 is not proof it works."""
