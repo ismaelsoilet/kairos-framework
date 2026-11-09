@@ -1,8 +1,17 @@
 #!/usr/bin/env node
 /**
- * K-Bench Multi-LLM Benchmark & Physical Token Audit Harness
- * Evaluates multiple models under Raw Vibe Coding vs KAIROS Framework SDLC.
- * Uses real BPE tokenization (gpt-tokenizer) and physical runtime executions.
+ * K-Bench SIMULATION — no model is called.
+ *
+ * This script does NOT contact any LLM provider. The prompts and completions
+ * below are string literals in this file. The BPE tokenizer does measure those
+ * strings honestly, which is why every "model" produced identical token counts:
+ * it was tokenizing the same text six times.
+ *
+ * The "51% to 68%" economy it printed came from `vibeReworkTokens * 18`, an
+ * invented multiplier. That claim is retracted — see RETRACTION.md.
+ *
+ * Kept because deleting it would hide how the original number was made.
+ * For a real design see benchmark/PREREGISTRATION.md.
  */
 
 const fs = require('fs');
@@ -147,9 +156,12 @@ async function evaluateModelOnScenarios(modelConfig) {
 
 async function runBenchmarkAll() {
     console.log("==========================================================================");
-    console.log("🔬 K-BENCH MULTI-LLM BENCHMARK & PHYSICAL TOKEN AUDIT LAB");
+    console.log("⚠️  K-BENCH SIMULATION — NO MODEL IS CALLED");
     console.log("==========================================================================");
-    console.log("Testing across 6 Leading LLM Profiles with Real BPE Token Accounting:\n");
+    console.log("Every 'model' below is tokenized from the same literal strings in this");
+    console.log("file, so identical token counts across models are expected, not a finding.");
+    console.log("The economy figure comes from an invented *18 multiplier (RETRACTION.md).");
+    console.log("==========================================================================\n");
 
     const results = [];
 
@@ -184,17 +196,25 @@ async function runBenchmarkAll() {
     }
 
     console.log("==========================================================================");
-    console.log("🏆 KEY EMPIRICAL FINDINGS:");
-    console.log("  1. Vibe Coding appears cheaper in the 1st turn (~500-1,200 tok), but leaks race conditions & frauds.");
-    console.log("  2. Debugging & rework loops multiply token consumption by 4x - 6x.");
-    console.log("  3. KAIROS eliminates 100% of rework loops, delivering 100% verified first-pass quality.");
-    console.log("  4. Total net token savings of KAIROS vs Vibe Coding with Rework: 45% to 68% across all models.");
+    console.log("WHAT THIS OUTPUT DOES NOT SHOW:");
+    console.log("  • Any model behaviour. No API was called.");
+    console.log("  • Any real token saving. The multiplier is a constant in the source.");
+    console.log("  • Any fraud rate. Those fields are string literals.");
+    console.log("==========================================================================");
+    console.log("Withdrawn findings (RETRACTION.md): '45% to 68% savings',");
+    console.log("'100% verified first-pass quality', '0% fraud leakage'.");
     console.log("==========================================================================");
 
-    // Save persistent benchmark results
+    // Save persistent results, flagged as a simulation so nothing downstream
+    // can mistake this file for measurement data.
     const outputPath = path.join(__dirname, 'benchmark_results.json');
-    fs.writeFileSync(outputPath, JSON.stringify({ timestamp: new Date().toISOString(), results }, null, 2));
-    console.log(`\n💾 Saved detailed multi-LLM benchmark report to: ${outputPath}`);
+    fs.writeFileSync(outputPath, JSON.stringify({
+        timestamp: new Date().toISOString(),
+        kind: "SIMULATION — no model called, no measurement performed",
+        retracted: true,
+        results
+    }, null, 2));
+    console.log(`\n💾 Saved SIMULATION output to: ${outputPath}`);
 
     return results;
 }

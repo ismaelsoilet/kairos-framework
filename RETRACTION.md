@@ -4,6 +4,12 @@
 **Affects:** KAIROS v1.0.0 – v1.1.0 (commits up to `23cffa7`)
 **Status:** All affected claims are **withdrawn** as of v1.2.
 
+> **Path note:** paths below refer to the v1.1.0 layout. In v1.2,
+> `benchmark/runner.py` was renamed to `benchmark/projection_runner.py` and
+> `benchmark/kbench_multi_llm/` to `benchmark/simulation_multi_llm/`, so the
+> names themselves state that neither measures anything. The files were kept,
+> not deleted — deleting them would hide how the numbers were produced.
+
 ---
 
 ## Summary (English)

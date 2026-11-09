@@ -1,8 +1,18 @@
 #!/usr/bin/env python3
 """
-K-Bench: The Anti-Vaporware Benchmark Harness for KAIROS
-Automated scientific testbed that executes controlled software challenges,
-measures token expenditure, tests mutation survival, and checks fraud detection.
+K-Bench: a PROJECTION, not a measurement.
+
+This script does not run any agent and does not measure anything. It prints a
+table built from constants in the SCENARIOS dict below, to illustrate how the
+Elastic Dial would allocate budgets if its assumptions held. It was previously
+presented as empirical evidence for a 55% token saving. That claim is retracted
+(see RETRACTION.md).
+
+For a real experiment design, see benchmark/PREREGISTRATION.md. For a real run
+with real token data, see benchmark/case_study_gemini_n1/.
+
+Kept in the repository because deleting it would hide the mistake. Every banner
+below now says what the output actually is.
 """
 
 import sys
@@ -152,12 +162,14 @@ def evaluate_fraud_detector():
     return detected == total
 
 def run_benchmark():
-    print("==========================================================================")
-    print("🔬 K-BENCH: ARCHITECTURAL EVALUATION & EMPIRICAL AUDIT REPORT")
-    print("==========================================================================")
+    print("=" * 74)
+    print("⚠️  K-BENCH PROJECTION — NOT A MEASUREMENT")
+    print("=" * 74)
+    print("No agent was run. The numbers below are constants from SCENARIOS.")
+    print("They illustrate budget allocation, not observed results.")
+    print("See RETRACTION.md for why the previous 'empirical scorecard' was withdrawn.")
+    print("=" * 74)
     print("Comparing 3 Methodologies across 4 Standardized Scenarios:")
-    print("  (Note: Scenarios K-01 to K-04 present an analytical projection based on the")
-    print("   Elastic Dial matrices, while the Live Physical Lab executes real threads.)\n")
     print("  • Metodologia A: Raw Vibe Coding (Cursor/Copilot prompt padrão)")
     print("  • Metodologia B: Heavy Monolith (Todas as 9 etapas rígidas para tudo)")
     print("  • Metodologia C: KAIROS (Adaptive SDLC com Elastic Dial)\n")
@@ -221,10 +233,10 @@ def run_benchmark():
         })
 
     # Summary Table
-    print("\n==========================================================================")
-    print("📊 K-BENCH MACRO PROJECTION & BUDGET COMPARISON")
-    print("   (Based on Elastic Dial profiles vs monolithic multi-agent architectures)")
-    print("==========================================================================")
+    print("\n" + "=" * 74)
+    print("📊 PROJECTED BUDGET COMPARISON (constants, not observations)")
+    print("   These figures were never measured. Do not cite them as results.")
+    print("=" * 74)
     print(f"{'Cenário':<22} | {'Vibe Coding':<16} | {'Heavy Monolith':<16} | {'KAIROS (Elastic)':<16}")
     print("-" * 76)
     
@@ -242,21 +254,27 @@ def run_benchmark():
         total_tokens_kairos += r['kairos']['tokens']
 
     print("-" * 76)
-    print(f"{'TOTAL DE TOKENS':<22} | {total_tokens_vibe//1000}k tokens       | {total_tokens_mono//1000}k tokens      | {total_tokens_kairos//1000}k tokens")
-    print(f"{'ECONOMIA KAIROS':<22} | {'--':<16} | Base (0%)        | {int((1 - total_tokens_kairos/total_tokens_mono)*100)}% de Economia!")
-    print(f"{'FRAUD ESCAPE RATE':<22} | ~46.7% vazamento | ~3.8% vazamento  | 0.0% (Zero Trust)")
-    print("==========================================================================")
-    print("🏆 CONCLUSÃO DO BENCHMARK:")
-    print("  1. KAIROS entrega taxa de sucesso equivalente ou superior ao Heavy Monolith.")
-    print(f"  2. Economiza {int((1 - total_tokens_kairos/total_tokens_mono)*100)}% de tokens através do Elastic Dial.")
-    print("  3. Elimina completamente as fraudes clássicas de LLM que devastam o Vibe Coding.")
-    print("==========================================================================")
+    print(f"{'TOTAL DE TOKENS':<22} | {total_tokens_vibe//1000}k tokens (proj) | {total_tokens_mono//1000}k tokens (proj) | {total_tokens_kairos//1000}k tokens (proj)")
+    print(f"{'DELTA PROJETADO':<22} | {'--':<16} | Base             | {int((1 - total_tokens_kairos/total_tokens_mono)*100)}% (arithmetic on constants)")
+    print("=" * 74)
+    print("O QUE ESTE SCRIPT NÃO FAZ:")
+    print("  • Não executa agente algum.")
+    print("  • Não mede tokens: lê constantes do dicionário SCENARIOS.")
+    print("  • Não mede taxa de sucesso nem vazamento de fraude.")
+    print("  • As linhas 'FRAUD ESCAPE RATE' que existiam aqui eram texto literal.")
+    print("=" * 74)
+    print("Para um desenho de experimento válido: benchmark/PREREGISTRATION.md")
+    print("Para dados reais de uma execução:   benchmark/case_study_gemini_n1/")
+    print("Para o motivo da retratação:        RETRACTION.md")
+    print("=" * 74)
 
 def main():
-    parser = argparse.ArgumentParser(description="K-Bench Anti-Vaporware Evaluation")
-    parser.add_argument("--test-detector", action="store_true", help="Test synthetic fraud detector")
-    parser.add_argument("--run", action="store_true", help="Execute comparative benchmark suite")
-    parser.add_argument("--physical", action="store_true", help="Execute physical concurrency & race experiment")
+    parser = argparse.ArgumentParser(
+        description="K-Bench PROJECTION — prints constants; measures nothing. "
+                    "See benchmark/PREREGISTRATION.md for the real experiment design.")
+    parser.add_argument("--test-detector", action="store_true", help="Run the synthetic detector self-check (3 authored samples)")
+    parser.add_argument("--run", action="store_true", help="Print the budget projection table")
+    parser.add_argument("--physical", action="store_true", help="Execute the physical concurrency experiment (this one is real)")
     args = parser.parse_args()
 
     if args.physical or (not args.test_detector and run_physical_experiment):

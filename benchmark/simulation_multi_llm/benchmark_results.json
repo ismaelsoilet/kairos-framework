@@ -1,5 +1,7 @@
 {
-  "timestamp": "2026-11-08T12:07:45.995Z",
+  "timestamp": "2026-11-09T01:41:57.075Z",
+  "kind": "SIMULATION — no model called, no measurement performed",
+  "retracted": true,
   "results": [
     {
       "modelId": "gemini-3.8-flash",
