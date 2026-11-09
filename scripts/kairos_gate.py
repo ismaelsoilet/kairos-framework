@@ -103,14 +103,23 @@ class Spec:
         return out
 
     def _extract_no_change(self):
-        """Files or globs declared as must-not-change."""
+        """Files or globs declared as must-not-change.
+
+        Only backticked tokens that look like a path are taken. An earlier version
+        also matched bare words, so the prose "the `gate` command must not break"
+        became a rule that blocked any diff touching a file with "gate" in its
+        name — the check accused the work it was meant to verify.
+        """
         out = []
         for heading, body in self.sections.items():
             if not re.search(r"no[- ]change|must not change|invariant", heading, re.IGNORECASE):
                 continue
-            for m in re.finditer(r"`([^`]+)`|([\w./-]+\.\w{1,5})\b", body):
-                token = (m.group(1) or m.group(2) or "").strip()
-                if token and not token.startswith("http"):
+            for m in re.finditer(r"`([^`]+)`", body):
+                token = m.group(1).strip()
+                if not token or token.startswith("http"):
+                    continue
+                # A path has a separator and a dot, or ends in a glob.
+                if re.search(r"[/*]", token) and ("." in token or "*" in token):
                     out.append(token)
         return out
 

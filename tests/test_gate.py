@@ -206,6 +206,16 @@ class TestRegressions(unittest.TestCase):
         result = gate(spec, diff)
         self.assertNotIn("spec_drift", [f["rule"] for f in result["findings"]])
 
+    def test_backticked_word_is_not_a_no_change_path(self):
+        """Regression: prose like `gate` was read as a path and blocked every diff
+        that touched a file with that word in its name."""
+        spec = COMPLETE_SPEC.replace(
+            "- `src/deposits.py`\n- `src/legacy/*`",
+            "The `gate` command must not break. `src/deposits.py` must not change.")
+        s = Spec("x.md", spec)
+        self.assertIn("src/deposits.py", s.no_change)
+        self.assertNotIn("gate", s.no_change)
+
     def test_pytest_raises_counts_as_assertion(self):
         """Replacing try/except+assert with pytest.raises is a strict improvement;
         it must not be reported as an assertion deletion."""
