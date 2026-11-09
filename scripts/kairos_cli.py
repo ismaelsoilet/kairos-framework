@@ -469,7 +469,7 @@ FRAUD_PATTERNS = {
         "Empty exception handler / Silent failure"
     ),
     "phantom_stub": (
-        r"(def\s+\w+\s*\(.*\)\s*:\s*(pass|\.\.\.|return\s+None|return\s+\{\}|return\s+\[\]|return\s+['\"]['\"])|function\s+\w+\s*\(.*\)\s*\{\s*(return\s+null;|return\s+undefined;|return\s+\{\};)?\s*\}|throw\s+new\s+NotImplementedError|raise\s+NotImplementedError)",
+        r"(^\s*def\s+\w+\s*\(.*\)\s*:\s*(pass|\.\.\.|return\s+None|return\s+\{\}|return\s+\[\]|return\s+['\"]['\"])|^\s*(?:export\s+)?(?:async\s+)?function\s+\w+\s*\([^)]*\)\s*\{\s*(return\s+(null|undefined|\{\}|\[\]);?)?\s*\}|throw\s+new\s+NotImplementedError|raise\s+NotImplementedError)",
         "Stub or unfinished function body"
     ),
     "tautological_assertion": (
@@ -632,6 +632,41 @@ def _judge_handler(body, fname, header, language, violations, context_lines=None
             })
             return
 
+def _strip_string_context(added_lines):
+    """Mark added-line indices that sit inside a multi-line string literal.
+
+    Real diffs embed code in triple-quoted fixtures — e.g.
+    `testdir.getitem("def test_x(): pass")` in pytest's own suite, or template
+    strings in JS. Matching inside those was the single largest source of false
+    positives in the external study (17 of 38 flags).
+    """
+    inside = set()
+    open_delim = None
+    for idx, line in enumerate(added_lines):
+        if open_delim is not None:
+            inside.add(idx)
+            if line.count(open_delim) % 2 == 1:
+                open_delim = None
+            continue
+        # A line that opens a block string is itself code; lines after it are not.
+        for delim in ('"""', "'''", "`"):
+            if line.count(delim) % 2 == 1:
+                open_delim = delim
+                break
+    return inside
+
+_INLINE_STRING_RE = re.compile(r"""('(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`)""")
+
+def _strip_inline_strings(line):
+    """Replace the contents of single-line string literals with empty strings.
+
+    Code passed as data (`testdir.getitem("def test_x(): pass")`, template
+    snippets, generated fixtures) must not be judged as if it were code.
+    """
+    if '"' not in line and "'" not in line and "`" not in line:
+        return line
+    return _INLINE_STRING_RE.sub('""', line)
+
 def scan_diff_text(diff_text, allow_files=()):
     """Scanner for the classic LLM frauds across single and multi-line diff blocks.
 
@@ -651,6 +686,9 @@ def scan_diff_text(diff_text, allow_files=()):
     file_added_asserts = {}
     file_deleted_tests = {}
     file_added_tests = {}
+    # Per-file open multi-line string delimiter, so single-line rules do not match
+    # code that is actually data inside a triple-quoted fixture.
+    file_string_state = {}
 
     for line in lines:
         if line.startswith("--- a/"):
@@ -702,6 +740,23 @@ def scan_diff_text(diff_text, allow_files=()):
             # Skip embedded diff text fixtures inside test files (lines whose source text begins with '+')
             if stripped_code.startswith("+"):
                 continue
+            # Judge the code, not the string data it carries.
+            judgeable = _strip_inline_strings(stripped_code)
+
+            # Update multi-line string state for this file. A line that starts while
+            # a block string is open is data, not code.
+            open_delim = file_string_state.get(current_file)
+            inside_block_string = open_delim is not None
+            if open_delim is not None and stripped_code.count(open_delim) % 2 == 1:
+                file_string_state[current_file] = None
+            elif open_delim is None:
+                for delim in ('"""', "'''", "`"):
+                    if stripped_code.count(delim) % 2 == 1:
+                        file_string_state[current_file] = delim
+                        break
+            if inside_block_string:
+                continue
+
             is_comment = stripped_code.startswith("#") or stripped_code.startswith("//") or stripped_code.startswith('"""') or stripped_code.startswith("'''") or stripped_code.startswith("*")
             for key, (pattern, desc) in FRAUD_PATTERNS.items():
                 if not is_code and key != "obsolete_ai_model_reference":
@@ -716,7 +771,10 @@ def scan_diff_text(diff_text, allow_files=()):
                     continue
                 if is_comment and key == "weakened_test_skip" and not re.search(r"(#|//)\s*(assert\b|expect\()", stripped_code):
                     continue
-                if re.search(pattern, stripped_code):
+                # Match against the code with string contents blanked out — except for
+                # model identifiers, which are *supposed* to live inside string literals.
+                target = stripped_code if key == "obsolete_ai_model_reference" else judgeable
+                if re.search(pattern, target):
                     violations.append({
                         "file": current_file,
                         "line": stripped_code,
@@ -839,11 +897,16 @@ def scan_diff_text(diff_text, allow_files=()):
         if not any(fname.lower().endswith(ext) for ext in CODE_EXTENSIONS):
             continue
         n = len(added)
+        in_string = _strip_string_context(added)
         for i in range(n):
+            if i in in_string:
+                continue
             line_i = added[i].strip()
+            # Blank string contents so fixture code inside one line is not judged.
+            line_i_judged = _strip_inline_strings(line_i)
 
             # Python except block: judge the whole handler body, not just the next token
-            if re.match(r"^except\b[^:]*:", line_i):
+            if re.match(r"^except\b[^:]*:", line_i_judged):
                 body = []
                 for j in range(i + 1, min(i + 10, n)):
                     stmt = added[j]
@@ -857,7 +920,7 @@ def scan_diff_text(diff_text, allow_files=()):
                                context_lines=added[max(0, i - 4):i + 1])
 
             # JS/TS catch block: same treatment
-            if re.search(r"(?<!\.)\bcatch(\s*\([^\)]*\))?\s*\{", line_i) or re.match(r"^\}?\s*catch(\s*\([^\)]*\))?\s*$", line_i):
+            if re.search(r"(?<!\.)\bcatch(\s*\([^\)]*\))?\s*\{", line_i_judged) or re.match(r"^\}?\s*catch(\s*\([^\)]*\))?\s*$", line_i_judged):
                 body = []
                 # Count braces only from the `catch` keyword onward: a leading `}`
                 # closes the try block, not the handler body.
@@ -881,7 +944,7 @@ def scan_diff_text(diff_text, allow_files=()):
 
             # Mock substitution: patching a method on an existing object replaces the
             # unit under test, so the assertion only verifies the mock.
-            if is_test and (MOCK_PATCH_RE.match(line_i) or MOCK_SPY_RE.search(line_i)):
+            if is_test and (MOCK_PATCH_RE.match(line_i_judged) or MOCK_SPY_RE.search(line_i_judged)):
                 violations.append({
                     "file": fname,
                     "line": line_i,
@@ -895,7 +958,7 @@ def scan_diff_text(diff_text, allow_files=()):
                 (r"^def\s+(\w*(?:valid|check|verif|auth|allow|perm|guard)\w*)\s*\(.*\)\s*:", r"^return\s+(True|1)\s*$"),
                 (r"^(?:function\s+(\w*(?:valid|check|verif|auth|allow|perm|guard|can)\w*)|(?:const|let)\s+(\w*(?:valid|check|verif|auth|allow|perm|guard|can)\w*)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>)\s*\{?", r"^return\s+(true|1)\s*;?$"),
             ):
-                m_fn = re.match(fn_regex, line_i)
+                m_fn = re.match(fn_regex, line_i_judged)
                 if not m_fn:
                     continue
                 body = []
@@ -915,8 +978,18 @@ def scan_diff_text(diff_text, allow_files=()):
                     })
 
             # Function stub check (Python and JS/TS)
-            is_py_func = re.match(r"^def\s+\w+\s*\(.*\)\s*:", line_i)
-            is_js_func = re.match(r"^(function\s+\w+|const\s+\w+\s*=\s*(\([^\)]*\)|async\s*\([^\)]*\))\s*=>)\s*\{?", line_i)
+            is_py_func = re.match(r"^def\s+\w+\s*\(.*\)\s*:", line_i_judged)
+            # Only a STATEMENT-position function can have a body we can inspect.
+            # `defineProps(function chalk() {}, styles)` passes a function
+            # EXPRESSION as an argument; its `{}` is the whole body, not a stub.
+            # Anchoring at column 0 rejects the argument form.
+            is_js_func = re.match(
+                r"^(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+\w+\s*\([^)]*\)\s*\{",
+                line_i_judged
+            ) or re.match(
+                r"^(?:const|let|var)\s+\w+\s*=\s*(?:async\s*)?(?:\([^)]*\)|\w+)\s*=>\s*\{",
+                line_i_judged
+            )
 
             if is_py_func:
                 for j in range(i + 1, min(i + 10, n)):
@@ -933,18 +1006,28 @@ def scan_diff_text(diff_text, allow_files=()):
                     break
 
             if is_js_func:
-                for j in range(i + 1, min(i + 10, n)):
-                    next_stmt = added[j].strip()
-                    if not next_stmt or next_stmt.startswith("//") or next_stmt.startswith("/*") or next_stmt.startswith("*"):
-                        continue
-                    if next_stmt in ("}", "return null;", "return undefined;", "return {};", "return [];"):
-                        violations.append({
-                            "file": fname,
-                            "line": f"{line_i} ... {next_stmt}",
-                            "fraud_type": "phantom_stub",
-                            "description": f"Multi-line function stub in JS/TS ({next_stmt})"
-                        })
-                    break
+                # If the block opens and closes on the same line, the "body" is on this
+                # line — never the empty body of the following lines. Inline `{}` is a
+                # deliberate no-op or a prototype target, not an unfinished stub.
+                opens = line_i_judged.count("{")
+                closes = line_i_judged.count("}")
+                if opens > 0 and closes >= opens:
+                    break_after = True
+                else:
+                    break_after = False
+                if not break_after:
+                    for j in range(i + 1, min(i + 10, n)):
+                        next_stmt = added[j].strip()
+                        if not next_stmt or next_stmt.startswith("//") or next_stmt.startswith("/*") or next_stmt.startswith("*"):
+                            continue
+                        if next_stmt in ("}", "return null;", "return undefined;", "return {};", "return [];"):
+                            violations.append({
+                                "file": fname,
+                                "line": f"{line_i} ... {next_stmt}",
+                                "fraud_type": "phantom_stub",
+                                "description": f"Multi-line function stub in JS/TS ({next_stmt})"
+                            })
+                        break
 
     return violations
 

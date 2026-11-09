@@ -134,9 +134,21 @@ Ele **não** pega, a partir da v1.2:
 - uma função de validação que retorna `True` incondicionalmente
 - uma guarda removida
 
-Uma sonda independente com oito padrões de fraude detectou três contra a v1.1.0. O corpus em `tests/fixtures/fraud_corpus/` agora tem 43 diffs rotulados (24 fraude, 19 limpos) e reporta **recall 100%, precision 96%** — com um falso positivo conhecido: mockar dependência externa é indistinguível, para uma regex, de mockar a unidade sob teste.
+Uma sonda independente com oito padrões de fraude detectou três contra a v1.1.0. O corpus em `tests/fixtures/fraud_corpus/` agora tem 43 diffs rotulados (24 fraude, 19 limpos) e reporta **recall 100%, precision 96%**.
 
-Leia esse número com cuidado. O corpus foi iterado contra as regras, então é uma suíte de regressão, não evidência em dados não vistos. Um holdout limpo, escrito depois das regras, deu **6/8 (75%)**. Os dois erros dele estão registrados como limitações conhecidas, não corrigidos em silêncio. Histórico completo em [`CLAIMS.md`](CLAIMS.md#holdout-history).
+**Esse número não se transfere.** Em 255 pull requests reais já mergeados de 8 projetos open-source, a precision foi **26,9% antes das correções e 46,7% depois**. Duas das cinco regras deram **0%** em código externo. Detalhamento completo, incluindo quais regras valem a pena, em [`docs/EXTERNAL_VALIDATION.md`](docs/EXTERNAL_VALIDATION.md).
+
+Precision por regra em código externo:
+
+| Regra | Precision |
+| :--- | ---: |
+| `weakened_test_skip` | 89% |
+| `assert_deletion` | 71% |
+| `silent_failure_empty_catch` | 17% |
+| `guard_removal` | **0%** |
+| `phantom_stub` | **0%** |
+
+As duas últimas devem ser consideradas quebradas. São contadas, estão documentadas, e não são recomendadas para uso em gate.
 
 **O scanner não exclui mais o próprio arquivo-fonte da auditoria.** Até a v1.1.0 ele excluía (`if current_file.endswith("kairos_cli.py"): continue`), o que significava que a ferramenta não conseguia auditar a ferramenta. Essa exclusão foi removida.
 

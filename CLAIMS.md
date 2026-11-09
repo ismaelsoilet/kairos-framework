@@ -32,6 +32,18 @@
 | C-010 | `README.md` | Fresh holdout generalisation | 6/8 (75%) before its two misses were folded into the corpus | MEASURED | transcript in this file, section "Holdout history" | manual probe | 2026-11-08 | MEASURED |
 | C-011 | `benchmark/PREREGISTRATION.md` | Benchmark hypotheses H1/H0/H2 | **no data collected** | — | `benchmark/PREREGISTRATION.md` | — | pending | UNVERIFIED |
 | C-012 | `README.md` | Scanner runtime on a 500-line diff | **not measured** | — | — | — | pending | UNVERIFIED |
+| C-013 | `docs/EXTERNAL_VALIDATION.md` | External precision, 255 merged PRs, before fixes | 26.9% (14 TP / 52 flags) | MEASURED | `benchmark/external/` + 8 cloned repos, stride rule pre-registered | `adjudicate.py --flags flags.json` | 2026-11-08 | MEASURED |
+| C-014 | `docs/EXTERNAL_VALIDATION.md` | External precision after fixes | 46.7% (14 TP / 30 flags) | MEASURED | same | `adjudicate_final.py --flags flags5.json` | 2026-11-08 | MEASURED |
+| C-015 | `docs/EXTERNAL_VALIDATION.md` | Precision by rule: weakened_test_skip / assert_deletion / silent_failure / guard_removal / phantom_stub | 89% / 71% / 17% / 0% / 0% | MEASURED | same | same | 2026-11-08 | MEASURED |
+| C-016 | `docs/EXTERNAL_VALIDATION.md` | External PR flag rate | 5.9% (15 of 255) | MEASURED | same | `scan_prs.py` | 2026-11-08 | MEASURED |
+| C-017 | `docs/EXTERNAL_VALIDATION.md` | Injection detection on real merged diffs | 30/30, injections authored knowing the rules | CASE_STUDY | `injection_test.py` | `python3 benchmark/external/injection_test.py` | 2026-11-08 | CASE_STUDY |
+| C-018 | `docs/EXTERNAL_VALIDATION.md` | R1 test-deletion detection | 8/8, near-circular (same arithmetic as the rule tested) | CASE_STUDY | `recall_estimate.py` | same pattern | 2026-11-08 | CASE_STUDY |
+
+C-014 qualifies C-008 and C-009: the internal corpus precision of 96% **does not
+transfer**. On external code it is 46.7%, and two of the five rules score 0%.
+
+The corpus precision describes a regression suite. The external number describes
+the tool. Where they disagree, the external number is the one to plan around.
 
 Claims C-011 and C-012 are listed as `UNVERIFIED` rather than omitted: they are
 the two things a reader would most reasonably ask next, and the honest answer

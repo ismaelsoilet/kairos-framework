@@ -134,9 +134,21 @@ It **does not** catch, as of v1.2:
 - a validation function that unconditionally returns `True`
 - a removed guard clause
 
-An independent probe of eight fraud patterns detected three against v1.1.0. The corpus under `tests/fixtures/fraud_corpus/` now holds 43 labelled diffs (24 fraud, 19 clean) and reports **recall 100%, precision 96%** — with one known false positive: mocking an external dependency is indistinguishable, to a regex, from mocking the unit under test.
+An independent probe of eight fraud patterns detected three against v1.1.0. The corpus under `tests/fixtures/fraud_corpus/` now holds 43 labelled diffs (24 fraud, 19 clean) and reports **recall 100%, precision 96%**.
 
-Read that number carefully. The corpus was iterated against the rules, so it is a regression suite, not held-out evidence. A fresh holdout written after the rules scored **6/8 (75%)**. Its two misses are recorded as known limitations rather than quietly fixed. Full history in [`CLAIMS.md`](CLAIMS.md#holdout-history).
+**That number does not transfer.** Over 255 real merged pull requests from 8 open-source projects, precision was **26.9% before fixes and 46.7% after**. Two of the five rules scored **0%** on external code. Full breakdown, including which rules are worth keeping, in [`docs/EXTERNAL_VALIDATION.md`](docs/EXTERNAL_VALIDATION.md).
+
+Precision by rule on external code:
+
+| Rule | Precision |
+| :--- | ---: |
+| `weakened_test_skip` | 89% |
+| `assert_deletion` | 71% |
+| `silent_failure_empty_catch` | 17% |
+| `guard_removal` | **0%** |
+| `phantom_stub` | **0%** |
+
+The last two should be considered broken. They are counted, they are documented, and they are not recommended for use in a gate.
 
 **The scanner no longer excludes its own source file from auditing.** Through v1.1.0 it did (`if current_file.endswith("kairos_cli.py"): continue`), which meant the tool could not audit the tool. That exclusion is gone.
 
