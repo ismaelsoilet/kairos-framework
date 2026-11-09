@@ -195,8 +195,15 @@ class OpenSpec(Spec):
         self.tasks = self._read(change_dir / "tasks.md")
         self.design = self._read(change_dir / "design.md")
         self.sections = {"_openspec": text}
-        self.criteria = [f"{r['name']}: {r['scenario']}" if r['scenario'] else r['name']
-                         for r in self.requirements if r["op"] in ("ADDED", "MODIFIED")]
+        # One criterion per SCENARIO, not per requirement. A requirement with
+        # three scenarios is three things to verify; keeping only the first
+        # under-counted the spec and let two thirds of it go unchecked.
+        self.criteria = []
+        for r in self.requirements:
+            if r["op"] not in ("ADDED", "MODIFIED"):
+                continue
+            for sc in (r.get("scenarios") or [None]):
+                self.criteria.append(f"{r['name']}: {sc}" if sc else r["name"])
         self.no_change = self._extract_no_change_openspec()
         self.declared_files = self._extract_files_openspec()
 
@@ -213,12 +220,12 @@ class OpenSpec(Spec):
                 continue
             m_req = re.match(r"^###\s*Requirement:\s*(.+)$", line, re.IGNORECASE)
             if m_req:
-                current = {"op": op, "name": m_req.group(1).strip(), "scenario": None}
+                current = {"op": op, "name": m_req.group(1).strip(), "scenarios": []}
                 out.append(current)
                 continue
             m_sc = re.match(r"^####\s*Scenario:\s*(.+)$", line, re.IGNORECASE)
-            if m_sc and current is not None and current["scenario"] is None:
-                current["scenario"] = m_sc.group(1).strip()
+            if m_sc and current is not None:
+                current["scenarios"].append(m_sc.group(1).strip())
         return out
 
     def completeness(self):
@@ -245,9 +252,9 @@ class OpenSpec(Spec):
                 r"schema|migration|model|database|data change|migraç|modelo|banco|tabela|coluna", haystack)),
             "edge_cases": bool(re.search(
                 r"error|failure|invalid|edge case|raise|throw|erro|falh|inválid|exceç|borda|concorrênc", haystack))
-                          or any(re.search(r"fail|error|invalid|erro|falh|inválid", (r["scenario"] or ""), re.I)
-                                 for r in self.requirements),
-            "acceptance_tests": any(r["scenario"] for r in self.requirements),
+                          or any(re.search(r"fail|error|invalid|erro|falh|inválid", sc, re.I)
+                                 for r in self.requirements for sc in (r.get("scenarios") or [])),
+            "acceptance_tests": any(r.get("scenarios") for r in self.requirements),
             "constraints": bool(re.search(
                 r"constraint|must not|dependenc|performance|security|restriç|não pode|não deve|desempenh|seguranç|compatib", haystack)),
             "no_change_list": bool(self._extract_no_change_openspec()),
@@ -554,8 +561,13 @@ def _words(text):
     return out
 
 
-def gate(spec, diff_text, allow_fraud_rules=(), verification=None):
+def gate(spec, diff_text, allow_fraud_rules=(), verification=None, incremental_diff=None):
     """Compare a delivered diff against its spec. Returns a verdict + findings.
+
+    `diff_text` is the whole change against the base: it answers "does this match
+    the spec". `incremental_diff` is the most recent commit only: it answers "did
+    this commit weaken something", which a base diff cannot see when the file is
+    new in this branch. Both are scanned; findings are de-duplicated.
 
     Verdicts:
       BLOCKED  a declared invariant was violated, or the spec is too weak to trust
@@ -657,13 +669,21 @@ def gate(spec, diff_text, allow_fraud_rules=(), verification=None):
 
     # 5. Fraud patterns. Only the rules with measured non-zero precision run by
     #    default; see docs/EXTERNAL_VALIDATION.md.
-    for v in scan_diff_text(diff_text, enable_rules=allow_fraud_rules):
-        findings.append({
-            "rule": f"fraud:{v['fraud_type']}",
-            "severity": "major" if v["fraud_type"] in ("assert_deletion", "weakened_test_skip") else "minor",
-            "detail": f"{v['file']}: {v['line'][:100]}",
-            "evidence": v["description"],
-        })
+    seen = set()
+    for source in (diff_text, incremental_diff or ""):
+        if not source:
+            continue
+        for v in scan_diff_text(source, enable_rules=allow_fraud_rules):
+            key = (v["fraud_type"], v["file"], v["line"])
+            if key in seen:
+                continue
+            seen.add(key)
+            findings.append({
+                "rule": f"fraud:{v['fraud_type']}",
+                "severity": "major" if v["fraud_type"] in ("assert_deletion", "weakened_test_skip") else "minor",
+                "detail": f"{v['file']}: {v['line'][:100]}",
+                "evidence": v["description"],
+            })
 
     # 6. Simplicity. The only Karpathy guideline with no check anywhere else.
     findings.extend(simplicity_findings(diff_text, spec))

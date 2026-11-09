@@ -57,16 +57,23 @@ here. It is recoverable from git history at tag `pre-prune`.
 
 ## The cycle
 
+Full walkthrough, verified end to end against a real OpenSpec project:
+**[`docs/WORKFLOW.md`](docs/WORKFLOW.md)**.
+
 ```bash
 kairos fit --touches 4 --criteria 5      # should this even have a spec?
-kairos brainstorm --new dark_mode        # three alternatives, and a falsifier
-openspec propose dark-mode               # the spec (OpenSpec owns this)
-# ... implement ...
-kairos gate --spec openspec/changes/dark-mode/specs/ui/spec.md \
+openspec new change add-rate-limit       # the plan (OpenSpec owns this)
+kairos brainstorm --new add-rate-limit   # three alternatives, and a falsifier
+# ... fill proposal, specs, design, then implement ...
+openspec validate add-rate-limit
+kairos gate --spec openspec/changes/add-rate-limit/specs/api/spec.md \
             --base main --verify "pytest -q"
 ```
 
 Exit code is `0` only on READY, so it drops into a pre-push hook.
+
+The gate also diffs `HEAD~1..HEAD`, because a test weakened inside a file that is
+new to the branch is invisible to the base diff.
 
 ---
 
@@ -196,6 +203,7 @@ kairos-framework/
 - [`RETRACTION.md`](RETRACTION.md) — the claims withdrawn in v1.2 and the mechanism behind each.
 - [`CLAIMS.md`](CLAIMS.md) — the ledger. Every number needs a row with an artifact.
 - [`docs/OPPORTUNITIES.md`](docs/OPPORTUNITIES.md) — what parts of this are worth building for others, and what is not.
+- [`docs/WORKFLOW.md`](docs/WORKFLOW.md) — the whole cycle with OpenSpec, start to finish, including what each verdict looks like in practice.
 
 Sixteen documents describing the v1.2 lifecycle moved to [`docs/archive/`](docs/archive/)
 when that lifecycle was removed in v1.3, including the single-run Gemini case

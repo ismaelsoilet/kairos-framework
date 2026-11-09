@@ -81,6 +81,25 @@ It is the only section the gate turns into a hard block. Be specific and literal
 - `api/v1/**`
 ```
 
+### The whole cycle
+
+[`docs/WORKFLOW.md`](../../docs/WORKFLOW.md) has the eleven steps with OpenSpec,
+verified end to end on a real project. Short version:
+
+```bash
+kairos fit --touches 4 --criteria 5          # 1. does this need a spec?
+openspec new change <name>                   # 2-5. the plan
+kairos brainstorm --new <name>               # 6. the alternatives
+#                                            # 7. fresh-context review
+# ... implement ...                          # 8. build
+openspec validate <name>                     # 9. structurally valid?
+kairos gate --spec <path> --base main \
+            --verify "<test cmd>"            # 10. does the diff match?
+openspec archive <name>                      # 11. fold into the living spec
+```
+
+Steps 1, 6, 7 and 10 are KAIROS. The rest is OpenSpec.
+
 ### This is a back end, not a framework
 
 Do not replace your spec tool with this. Use **one** spec tool — OpenSpec is the

@@ -272,7 +272,32 @@ class TestOpenSpecAdapter(unittest.TestCase):
             self.assertIsInstance(parsed, OpenSpec)
             self.assertEqual(len(parsed.requirements), 1)
             self.assertEqual(parsed.requirements[0]["op"], "ADDED")
-            self.assertEqual(parsed.requirements[0]["scenario"], "User toggles dark mode")
+            self.assertEqual(parsed.requirements[0]["scenarios"], ["User toggles dark mode"])
+
+    def test_multiple_scenarios_per_requirement_become_multiple_criteria(self):
+        """Regression: the parser kept only the first scenario of a requirement.
+        An OpenSpec requirement with three scenarios is three things to verify,
+        and two of them were going unchecked."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "openspec" / "changes" / "c"
+            (root / "specs" / "api").mkdir(parents=True)
+            (root / "proposal.md").write_text("## Why\nbecause\n", encoding="utf-8")
+            spec = root / "specs" / "api" / "spec.md"
+            spec.write_text(
+                "## ADDED Requirements\n\n"
+                "### Requirement: Per-client budget\n"
+                "The API SHALL limit each client.\n\n"
+                "#### Scenario: Within budget\n- **WHEN** a token exists\n- **THEN** pass\n\n"
+                "#### Scenario: Over budget\n- **WHEN** empty\n- **THEN** 429\n\n"
+                "#### Scenario: Refill\n- **WHEN** interval elapses\n- **THEN** refilled\n",
+                encoding="utf-8")
+            from kairos_gate import parse_spec
+            parsed = parse_spec(spec)
+            self.assertEqual(len(parsed.requirements), 1)
+            self.assertEqual(len(parsed.requirements[0]["scenarios"]), 3)
+            self.assertEqual(len(parsed.criteria), 3,
+                             f"expected 3 criteria, got {parsed.criteria}")
 
     def test_scenario_becomes_an_acceptance_criterion(self):
         import tempfile
@@ -653,6 +678,55 @@ If latency doubles under load.
             self.assertEqual(parsed["verification"]["exit_code"], 0)
             self.assertIn("Re-running", r.stderr,
                           "progress should go to stderr when --json is set")
+
+
+class TestIncrementalScan(unittest.TestCase):
+    """A test weakened inside a file that is NEW to this branch is invisible to a
+    base diff: the whole file reads as added, so there is no 'replacement'. Found
+    by running the gate against a real OpenSpec project, not by reading code."""
+
+    WEAKENED = """diff --git a/tests/test_x.py b/tests/test_x.py
+--- a/tests/test_x.py
++++ b/tests/test_x.py
+@@ -1,4 +1,4 @@
+ def test_budget():
+     reset()
+-    assert allow("a") is False
++    assert allow("a") is not None
+"""
+
+    def test_base_diff_alone_misses_it(self):
+        from kairos_cli import scan_diff_text
+        # Simulating the base diff: the file is new, so every line is an addition.
+        as_new_file = ("diff --git a/tests/test_x.py b/tests/test_x.py\n"
+                       "new file mode 100644\n--- /dev/null\n+++ b/tests/test_x.py\n"
+                       "@@ -0,0 +1,4 @@\n"
+                       "+def test_budget():\n+    reset()\n"
+                       '+    assert allow("a") is not None\n')
+        found = scan_diff_text(as_new_file, enable_rules=("weakened_assertion",))
+        self.assertEqual(found, [], "a new file has nothing to compare against")
+
+    def test_incremental_diff_catches_it(self):
+        from kairos_cli import scan_diff_text
+        found = scan_diff_text(self.WEAKENED, enable_rules=("weakened_assertion",))
+        self.assertTrue(found, "the incremental diff must catch the weakened assertion")
+        self.assertEqual(found[0]["fraud_type"], "weakened_assertion")
+
+    def test_gate_reports_it_when_incremental_is_given(self):
+        result = gate(Spec("x.md", COMPLETE_SPEC), CLEAN_DIFF,
+                      allow_fraud_rules=("weakened_assertion",),
+                      incremental_diff=self.WEAKENED)
+        rules = [f["rule"] for f in result["findings"]]
+        self.assertIn("fraud:weakened_assertion", rules)
+
+    def test_duplicates_are_not_reported_twice(self):
+        """The same finding can appear in both diffs; it must be reported once."""
+        diff = self.WEAKENED
+        result = gate(Spec("x.md", COMPLETE_SPEC), diff,
+                      allow_fraud_rules=("weakened_assertion",),
+                      incremental_diff=diff)
+        matches = [f for f in result["findings"] if f["rule"] == "fraud:weakened_assertion"]
+        self.assertEqual(len(matches), 1, f"reported {len(matches)} times")
 
 
 class TestDiffStats(unittest.TestCase):

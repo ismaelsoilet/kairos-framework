@@ -1213,11 +1213,24 @@ def cmd_gate(args):
                 print(f"    {ln[:110]}", file=progress)
         print(file=progress)
 
+    # The most recent commit, scanned separately. A file created in this branch
+    # looks entirely new against the base, so a test weakened inside it is
+    # invisible to the base diff. Comparing the last commit with its parent
+    # catches that.
+    incremental = ""
+    if getattr(args, "incremental", True):
+        inc = subprocess.run(["git", "diff", "HEAD~1", "HEAD"],
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                             text=True, cwd=target)
+        if inc.returncode == 0:
+            incremental = inc.stdout
+
     result = kairos_gate.gate(
         kairos_gate.parse_spec(spec_path),
         diff_text,
         allow_fraud_rules=tuple(args.enable_rule or ()),
         verification=verification,
+        incremental_diff=incremental,
     )
 
     state = load_state(target)
@@ -1343,6 +1356,11 @@ def main():
     p_gate.add_argument("--verify", default=None, metavar="CMD",
                         help="Command to re-run as evidence, e.g. 'pytest -q'. "
                              "Without it, any claim that tests pass stays unverified.")
+    p_gate.add_argument("--no-incremental", dest="incremental", action="store_false",
+                        help="Do not also scan the last commit separately. By default the "
+                             "gate compares HEAD with HEAD~1 as well, because a test "
+                             "weakened inside a file new to this branch is invisible to "
+                             "the base diff.")
 
     p_audit = subparsers.add_parser(
         "audit", help="Scan the current diff for fraud patterns")
