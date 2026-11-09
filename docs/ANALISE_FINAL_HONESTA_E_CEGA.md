@@ -63,7 +63,7 @@ flowchart TD
 
 ### 2.2. Dicotomia Cognitiva Elephant / Goldfish
 - **Como opera:** A especificação inicial é criada com visão holística do repositório (Elephant, carregando arquitetura, regras e contexto). A revisão da especificação e a auditoria de código são despachadas para subagentes com contexto zerado (Goldfish / `kairos_critic`), que analisam a proposta friamente sem a "memória afetiva" ou viés de confirmação da IA que criou o plano.
-- **Veredito Técnico:** **EXCELENTE (9.5/10)**. Esta é a técnica mais eficaz contra a complacência e o *sycophancy* de LLMs. Na prática das duas rodadas de Red Team, foi o subagente Goldfish que encontrou 14 das 18 vulnerabilidades do framework.
+- **Veredito Técnico (revisado na v1.2):** a técnica é sólida em princípio — um revisor sem contexto não pode ser convencido por conversa. **A nota 9.5/10 que existia aqui foi removida**: nota atribuída pelo autor ao próprio projeto sem critério externo é opinião com formato de métrica. A afirmação "encontrou 14 das 18 vulnerabilidades" também não é verificável — o relatório de red team não registra qual revisor encontrou cada item (ver `ADVERSARIAL_RED_TEAM_REPORT.md`, reescrito).
 
 ### 2.3. Execução Cirúrgica em Git Worktrees e TDD
 - **Como opera:** Em Mode Beta e Gamma, o KAIROS cria um workspace isolado via `git worktree add -b kairos/<name> .kairos/worktrees/<name>`. O desenvolvimento segue o rigor TDD: Red (teste falhando no commit) -> Green (implementação mínima) -> Refactor (limpeza).
@@ -87,11 +87,21 @@ No laboratório físico, executamos 50 threads simultâneas realizando saques de
 - **Com Vibe Coding Ingênuo:** Submetemos o diff típico gerado por LLMs apressados (comentando o assert `# assert account.balance == 500` e inserindo `except: pass`). O detector adversarial do KAIROS disparou `[ ❌ REFUTED ]` imediatamente.
 - **Com Engenharia KAIROS (TDD & Mutex):** O saldo final com `threading.Lock` foi aferido em R$ 500 cravados nas 3 tentativas. O diff correspondente passou pela auditoria com status `[ ✅ VERIFIED ]` com zero falso-positivo.
 
-### 3.2. Medição Real de Tokens e Payload
-Em vez de estimativas no ar, medimos o tamanho físico em bytes dos arquivos e payloads:
+### 3.2. Medição Real de Tamanho de Payload (e o que ela **não** prova)
+Medimos o tamanho físico em bytes de dois arquivos de exemplo:
 - **Payload Cirúrgico KAIROS:** 1.385 bytes (~364 tokens).
 - **Payload Monolítico Tradicional:** 20.800 bytes (~5.467 tokens).
-- **Economia Factual de Payload:** **93,3% de redução** em dados transmitidos no contexto do modelo.
+
+Isso é uma medição real de tamanho de arquivo. **Não é** uma medição de economia
+de tokens de um ciclo de trabalho. O número "93,3% de redução" que aparecia aqui
+comparava o tamanho de um payload pequeno com o de um payload grande escolhidos
+por quem escreveu o documento — não o custo de resolver a mesma tarefa por dois
+processos. Um agente que trabalha em 3 arquivos pequenos lê ~3×1.385 bytes
+independentemente do framework.
+
+A conclusão anterior — "economia factual de 93,3%" — está **retirada** por esse
+motivo. Para o protocolo que mediria de fato o custo de um ciclo, ver
+[`benchmark/PREREGISTRATION.md`](../benchmark/PREREGISTRATION.md).
 
 ---
 
@@ -157,15 +167,27 @@ Desenvolvedores acostumados a apenas "pedir para o chat consertar o código" pod
 
 ## 7. Comparativo de Mercado: Onde o KAIROS se Posiciona
 
-| Dimensão | Vibe Coding (Cursor / Copilot) | Heavy Monoliths (Superpowers / Fable) | Living Specs (OpenSpec / EGM) | **KAIROS Framework v1.0.0** |
+> **Nota (v1.2):** a tabela abaixo comparava quatro abordagens atribuindo
+> percentuais de gasto de tokens e de "evasão de fraudes" a cada uma. **Nenhum
+> daqueles números foi medido**, e o "0% de evasão" do KAIROS era falso: uma
+> sonda independente encontrou 5 de 8 fraudes passando pelo scanner da época
+> (ver `RETRACTION.md`). A tabela foi substituída por uma comparação de
+> mecanismos, sem números. Preservada apenas como registro do que foi afirmado.
+
+| Dimensão | Vibe Coding | Heavy Monoliths | Living Specs | KAIROS v1.2 |
 | :--- | :--- | :--- | :--- | :--- |
-| **Gasto de Tokens** | Baixo (~10k tok), mas gera retrabalho infinito | Altíssimo (~120k-200k tok) para qualquer tarefa | Médio (~50k tok) focado em documentação | **Elástico (~12k a 180k tok)** calibrado pelo Dial |
-| **Resistência a Fraudes** | Quase nula (~46% de evasão em testes) | Média-Alta (revisões verbais sujeitas a sycophancy) | Média (validação em markdown sem auditoria de diff) | **Zero-Trust (0% de evasão em diffs auditados)** |
-| **Dicotomia Cognitiva** | Nenhuma | Subagentes paralelos genéricos | Elephant / Goldfish conceituais | **Elephant (Design) & Goldfish (Crítica Hostil)** |
-| **Teste de Mutação** | Inexistente | Depende de ferramentas pesadas de terceiros | Inexistente | **K-Mutant nativo integrado com timeout** |
-| **Controle de Estado** | Nenhum | Arquivos temporários dispersos | Specs em markdown | **Atômico (`state.json` + Dashboard ASCII)** |
-| **Portabilidade** | Preso à IDE dona | Preso ao harness específico | Portável | **Universal (Antigravity, Claude Code, Cursor, Windsurf)** |
-| **Custo de Setup** | Zero | Médio (vários plugins) | Baixo | **Zero (Zero dependências pip/npm)** |
+| **Gasto de Tokens** | não medido | não medido | não medido | não medido |
+| **Detecção de fraude em diff** | nenhuma | revisão por LLM | nenhuma | regex + comparação de pares. **Recall 75% em holdout limpo** |
+| **Crítica de spec** | nenhuma | subagentes genéricos | conceitual | `kairos_critic` com contexto zero |
+| **Mutation testing** | não | terceiros | não | nativo (`kairos mutate`) |
+| **Controle de estado** | nenhum | arquivos temporários | markdown | `state.json` atômico com lock |
+| **Portabilidade** | preso à IDE | preso ao harness | portável | CLI Python, sem dependências |
+| **Custo de setup** | zero | plugins | baixo | zero dependências pip/npm |
+
+O que esta tabela **não** faz: atribuir nota, comparar desempenho, ou afirmar
+superioridade. Para isso seria necessário executar os quatro na mesma tarefa, com
+o mesmo modelo, e medir. Isso não foi feito. Ver
+[`COMPARATIVO_FRAMEWORKS.md`](COMPARATIVO_FRAMEWORKS.md).
 
 ---
 

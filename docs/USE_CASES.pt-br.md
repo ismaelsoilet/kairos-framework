@@ -32,9 +32,11 @@ Sem o KAIROS, um agente gastaria mais de 150.000 tokens criando documentos de ar
    git diff src/components/UserProfileCard.vue
    ```
 
-* **Tokens Consumidos:** ~6.800 tokens.
-* **Tempo Total:** 90 segundos.
-* **Economia:** **Mais de 90% vs. Monólito**.
+* **Custo em tokens deste cenário: não medido.** Versões anteriores desta página
+  afirmavam "~6.800 tokens" e "mais de 90% de economia vs monólito". Nenhum dos
+  dois foi medido — eram estimativas escritas como observações. Retirados (ver
+  `RETRACTION.md`). Esta página descreve *como o processo funciona*, não quanto
+  ele custa.
 
 ---
 

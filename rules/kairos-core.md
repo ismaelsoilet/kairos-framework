@@ -63,7 +63,7 @@ Before executing any request, calibrate the task risk and determine the **Execut
 
 ### ✅ O QUE O KAIROS FAZ:
 1. **Governa a Cognição do Agente:** Impede que o modelo seja condescendente (*sycophancy*) através de revisores sem memória (`kairos_critic`).
-2. **Orça e Controla Tokens:** Aloca orçamentos dinâmicos por complexidade, economizando até 85% de tokens em tarefas simples de tela/UI.
+2. **Orça por Complexidade:** Aloca orçamentos dinâmicos por complexidade (Alpha/Beta/Gamma) para que tarefas simples não paguem o custo de um pipeline completo. **A economia resultante não foi medida** — o classificador é casamento de palavra-chave e não há dado de consumo real (ver `RETRACTION.md`).
 3. **Isola o Workspace:** Impede desastres e poluição na branch principal usando `git worktree`.
 4. **Impõe TDD e Red-Green-Refactor:** Bloqueia a escrita de código de produção sem antes ver o teste correspondente falhar.
 5. **Caça Fraudes de Código:** Audita o `git diff` real procurando testes comentados, `try/catch` vazios e funções stubs.

@@ -32,9 +32,10 @@ Without KAIROS, an agent spends 150k tokens: generating architectural RFCs, asse
    git diff src/components/UserProfileCard.vue
    ```
 
-* **Total Tokens Consumed:** ~6,800 tokens.
-* **Turnaround Time:** 90 seconds.
-* **Token Savings:** **92% vs. Monolith**.
+* **Token cost of this scenario: not measured.** Earlier versions of this page
+  claimed "~6,800 tokens" and "92% savings vs monolith". Neither was measured —
+  they were estimates written as observations. Withdrawn (see `RETRACTION.md`).
+  This page describes *what the process looks like*, not what it costs.
 
 ---
 
