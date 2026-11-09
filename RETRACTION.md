@@ -5,8 +5,8 @@
 **Status:** All affected claims are **withdrawn** as of v1.2.
 
 > **Path note:** paths below refer to the v1.1.0 layout. In v1.2,
-> `benchmark/runner.py` was renamed to `benchmark/projection_runner.py` and
-> `benchmark/kbench_multi_llm/` to `benchmark/simulation_multi_llm/`, so the
+> `docs/archive/benchmarks/projection_runner.py` was renamed to `docs/archive/benchmarks/projection_runner.py` and
+> `docs/archive/benchmarks/simulation_multi_llm/` to `docs/archive/benchmarks/simulation_multi_llm/`, so the
 > names themselves state that neither measures anything. The files were kept,
 > not deleted — deleting them would hide how the numbers were produced.
 
@@ -22,11 +22,11 @@ This notice is permanent. It stays in the repository history, including after th
 
 | Claim | Where it appeared | How it was actually produced |
 | :--- | :--- | :--- |
-| "55% total token savings" | README (both languages) | `SCENARIOS` dict in `benchmark/runner.py` contains hardcoded token counts (`vibe_tokens`, `min_tokens_monolith`, `kairos_budget`). The script prints an "analytical projection"; the README presented it as an "Empirical Scorecard". |
+| "55% total token savings" | README (both languages) | `SCENARIOS` dict in `docs/archive/benchmarks/projection_runner.py` contains hardcoded token counts (`vibe_tokens`, `min_tokens_monolith`, `kairos_budget`). The script prints an "analytical projection"; the README presented it as an "Empirical Scorecard". |
 | "Success rates 20% / 95% / 98%" | README (both languages) | Same dict and the same `if sc["expected_mode"]` branches: `vibe_pass = 0.20`, `mono_pass = 0.95`, `kairos_pass = 0.98` are literals. No execution measured these. |
-| "Fraud escape rate ~46.7% / ~3.8% / 0.0%" | README (both languages) | Hardcoded print statement in `benchmark/runner.py:run_benchmark()`. The RNG-free string `"FRAUD ESCAPE RATE"` is literal text. |
+| "Fraud escape rate ~46.7% / ~3.8% / 0.0%" | README (both languages) | Hardcoded print statement in `docs/archive/benchmarks/projection_runner.py`. The RNG-free string `"FRAUD ESCAPE RATE"` is literal text. |
 | "Fraud Detection Score: 3/3 (100%)" | README, `--test-detector` output | The detector was tested only against 3 synthetic diffs written by the same author as the regexes it was testing. It measures self-consistency, not detection ability. An independent probe of 8 fraud patterns found 3 detected and 5 missed. |
-| "Multi-LLM benchmark across 6 models, real BPE measurement" | `benchmark/kbench_multi_llm/` | `runner.js` never calls any model API. Prompts and completions are string literals in the file. All six "models" therefore return byte-identical token counts (106 initial / 1,564 total / 759 KAIROS). |
+| "Multi-LLM benchmark across 6 models, real BPE measurement" | `docs/archive/benchmarks/simulation_multi_llm/` | `runner.js` never calls any model API. Prompts and completions are string literals in the file. All six "models" therefore return byte-identical token counts (106 initial / 1,564 total / 759 KAIROS). |
 | "51% to 68% economy across models" | `kbench_multi_llm` output, README | `const vibeRealisticTotal = vibeInitialTokens + (vibeReworkTokens * 18)`. The `* 18` multiplier is invented, not measured. Changing it changes the printed "economy". |
 | "19.3% net hardware token savings (Gemini 3.8 Flash)" | README, `docs/EMPIRICAL_BENCHMARK_REPORT.md`, badge | The arithmetic reproduces from two real transcript files (112,319 vs 90,676 active tokens). **The experimental design does not support the conclusion.** See below. |
 | "100% zero-defect first pass" | README, benchmark report | The two arms were given *different tasks*. See below. |
@@ -36,7 +36,7 @@ This notice is permanent. It stays in the repository history, including after th
 
 ### The Gemini benchmark specifically
 
-The token arithmetic in `benchmark/real_gemini_benchmark/` is real and reproduces. The conclusion drawn from it is not supportable, for one decisive reason:
+The token arithmetic in `docs/archive/benchmarks/real_gemini_benchmark/` is real and reproduces. The conclusion drawn from it is not supportable, for one decisive reason:
 
 - **Vibe arm prompt:** *"Implement a digital wallet class…"* — never mentions concurrency, race conditions, or mutexes.
 - **KAIROS arm prompt:** *"…must implement an `AsyncMutex` to serialize concurrent withdrawals, preventing race conditions… 50 concurrent requests…"* — states the solution in the requirement list.
@@ -48,7 +48,7 @@ Two further facts that were reported as wins but are not:
 - The KAIROS arm consumed **21,087 output tokens vs 9,422** in the vibe arm (2.2×), and required **9 permission retries**. These were described as "operational retries" folded into the total without being highlighted.
 - The sample is **n = 1 per arm**. No repetitions, no confidence interval, no control arm.
 
-The raw transcripts are preserved under `benchmark/case_study_gemini_n1/` and are relabeled as a **single case study**, not a benchmark.
+The raw transcripts are preserved under `docs/archive/benchmarks/case_study_gemini_n1/` and are relabeled as a **single case study**, not a benchmark.
 
 ### The fraud scanner's actual state at v1.1.0
 
@@ -83,7 +83,7 @@ The failure is not that nothing works. The failure is that **the validation laye
 
 1. All withdrawn numbers are removed from READMEs and documentation.
 2. Every remaining quantitative claim must carry a `claim_id` in [`CLAIMS.md`](CLAIMS.md) with a reproducible artifact, or it does not ship.
-3. Benchmarks must be pre-registered ([`benchmark/PREREGISTRATION.md`](benchmark/PREREGISTRATION.md)) before data collection, use symmetric prompts across arms, and report confidence intervals.
+3. Benchmarks must be pre-registered ([`docs/archive/benchmarks/PREREGISTRATION.md`](docs/archive/benchmarks/PREREGISTRATION.md)) before data collection, use symmetric prompts across arms, and report confidence intervals.
 4. The scanner must meet a stated recall/precision floor on a fixed corpus, or publish the number it actually reaches.
 5. Capabilities that are documented but not implemented are labeled as such.
 
@@ -97,7 +97,7 @@ Esta nota é permanente e permanece no repositório mesmo após a reescrita de h
 
 ### O que foi retirado
 
-- **"55% de economia"**, **"20%/95%/98% de sucesso"** e **"46.7%/3.8%/0.0% de vazamento de fraude"**: constantes literais em `benchmark/runner.py`. O próprio script imprime "analytical projection"; o README apresentava como "Empirical Scorecard".
+- **"55% de economia"**, **"20%/95%/98% de sucesso"** e **"46.7%/3.8%/0.0% de vazamento de fraude"**: constantes literais em `docs/archive/benchmarks/projection_runner.py`. O próprio script imprime "analytical projection"; o README apresentava como "Empirical Scorecard".
 - **"Benchmark multi-LLM com 6 modelos e BPE real"**: `runner.js` não chama API nenhuma. Os seis modelos retornam tokens idênticos porque o texto é literal no arquivo.
 - **"Economia de 51% a 68%"**: vem de `vibeReworkTokens * 18`, um multiplicador inventado.
 - **"19.3% de economia (Gemini 3.8 Flash)"**: a aritmética reproduz a partir de dois transcripts reais, mas **os dois braços receberam tarefas diferentes**. O braço KAIROS foi instruído a implementar `AsyncMutex` e evitar race condition; o braço Vibe não. O experimento mediu a diferença entre prompts, não o efeito do framework. Além disso: n = 1 por braço, sem repetições, sem intervalo de confiança, sem braço de controle.

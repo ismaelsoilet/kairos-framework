@@ -1,7 +1,7 @@
 # Validação externa do scanner de fraude
 
 **Data:** 2026-11-08
-**Protocolo:** [`benchmark/PREREGISTRATION_EXTERNAL.md`](../PREREGISTRATION_EXTERNAL.md), escrito antes de qualquer diff ser analisado.
+**Protocolo:** [`benchmark/PREREGISTRATION_EXTERNAL.md`](../benchmark/PREREGISTRATION_EXTERNAL.md), escrito antes de qualquer diff ser analisado.
 **Código:** `benchmark/external/`
 
 Este é o teste que o corpus interno não podia fazer. O corpus foi escrito pela
