@@ -1697,6 +1697,27 @@ def cmd_scout(args):
         print("  then verify the signature in the installed package.")
     print("=" * 72)
 
+    research_targets = getattr(args, "research", None) or []
+    if research_targets:
+        print()
+        print("=" * 72)
+        print("UPSTREAM DOCUMENTATION AND RELEASE NOTES")
+        print("=" * 72)
+        known = {(i[1], i[0]) for i in items}
+        for spec_name in research_targets:
+            match = [(eco, nm) for eco, nm, _d, _s in items if nm == spec_name]
+            if not match:
+                print(f"  {spec_name}: not in this project's manifests, skipping")
+                continue
+            eco, nm = match[0]
+            info = kairos_recon.research_package(eco, nm)
+            print(kairos_recon.format_research(info))
+            print()
+        print("  Read the migration guide before coding against a MAJOR gap. What")
+        print("  this cannot do: judge architectural fit, or notice that an approach")
+        print("  has fallen out of favour. That needs reading, not a script.")
+        print("=" * 72)
+
     k_dir = get_kairos_dir(root)
     try:
         k_dir.mkdir(parents=True, exist_ok=True)
@@ -2276,6 +2297,8 @@ def main():
     p_scout.add_argument("--all", action="store_true", help="List every package, not only gaps")
     p_scout.add_argument("--json", action="store_true", help="Machine-readable output")
     p_scout.add_argument("--offline", action="store_true", help="Parse manifests only; do not query registries")
+    p_scout.add_argument("--research", action="append", default=[], metavar="PKG",
+                         help="Also pull docs and recent release notes for a package (repeatable)")
 
     # Gate: verify a delivered diff against its spec (the anti-drift check)
     p_gate = subparsers.add_parser(

@@ -74,6 +74,17 @@ hardcoded list of "known breaking changes" that had itself gone stale — it nam
 a major as current that the registry had already superseded twice. Nothing in
 this repository now states a package version from memory.
 
+```bash
+kairos scout                        # what your manifest declares vs what exists
+kairos scout --research next        # plus docs URL and the last 3 release notes
+```
+
+`--research` pulls the repository, the documented docs and changelog URLs, and
+the last three GitHub releases with their notes. It does **not** judge
+architectural fit, notice that an approach has fallen out of favour, or discover
+a better alternative. Those need reading; a script claiming to detect trends
+would be guessing with extra steps.
+
 `brainstorm` refuses a brief with fewer than three alternatives or with an
 alternative that has no rejection reason, because a spec with no recorded
 alternatives is not a decision.

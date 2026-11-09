@@ -127,6 +127,94 @@ def parse_manifest(root):
     return unique
 
 
+def _repo_slug(url):
+    """'git+https://github.com/vercel/next.js.git' -> ('vercel', 'next.js')."""
+    if not url:
+        return None
+    m = re.search(r"github\.com[:/]+([^/]+)/([^/#?]+?)(?:\.git)?(?:[/#?].*)?$", str(url))
+    return (m.group(1), m.group(2)) if m else None
+
+
+def research_package(ecosystem, name, fetcher=_fetch_json):
+    """Pull the documentation and recent release notes that actually exist.
+
+    What this can do: find the registry entry, the repository, the documented
+    docs and changelog URLs, and the last few GitHub releases with their notes.
+
+    What this cannot do: judge whether a library is a good architectural fit,
+    notice that an approach has fallen out of favour, or discover a better
+    alternative nobody told it about. Those need reading and judgement. A script
+    that claimed to detect trends would be guessing with extra steps.
+    """
+    out = {"ecosystem": ecosystem, "name": name}
+
+    if ecosystem == "npm":
+        meta = fetcher(f"https://registry.npmjs.org/{name}/latest") or {}
+        out["version"] = meta.get("version")
+        repo = meta.get("repository") or {}
+        out["repository"] = repo.get("url") if isinstance(repo, dict) else repo
+        out["homepage"] = meta.get("homepage")
+        urls = meta.get("bugs") or {}
+        out["docs"] = meta.get("homepage")
+        out["changelog"] = None
+    elif ecosystem == "pypi":
+        meta = fetcher(f"https://pypi.org/pypi/{name}/json") or {}
+        info = meta.get("info") or {}
+        out["version"] = info.get("version")
+        urls = info.get("project_urls") or {}
+        out["repository"] = urls.get("Source") or urls.get("Homepage") or urls.get("Repository")
+        out["docs"] = urls.get("Documentation") or urls.get("Docs") or info.get("home_page")
+        out["changelog"] = urls.get("Changelog") or urls.get("Changes") or urls.get("Release Notes")
+        out["homepage"] = urls.get("Homepage")
+    elif ecosystem == "crates":
+        meta = fetcher(f"https://crates.io/api/v1/crates/{name}") or {}
+        crate = meta.get("crate") or {}
+        out["version"] = crate.get("max_stable_version") or crate.get("max_version")
+        out["repository"] = crate.get("repository")
+        out["docs"] = crate.get("documentation")
+        out["homepage"] = crate.get("homepage")
+        out["changelog"] = None
+    else:
+        return None
+
+    slug = _repo_slug(out.get("repository"))
+    if slug:
+        out["github"] = f"https://github.com/{slug[0]}/{slug[1]}"
+        releases = fetcher(f"https://api.github.com/repos/{slug[0]}/{slug[1]}/releases?per_page=3")
+        if isinstance(releases, list):
+            out["releases"] = [{
+                "tag": r.get("tag_name"),
+                "name": (r.get("name") or "")[:80],
+                "published": (r.get("published_at") or "")[:10],
+                "notes_excerpt": (r.get("body") or "")[:400].strip(),
+                "url": r.get("html_url"),
+            } for r in releases]
+    return out
+
+
+def format_research(info):
+    """Plain-text report. Says what it could not find instead of omitting it."""
+    if not info:
+        return "unknown ecosystem"
+    lines = [
+        f"{info['name']}  ({info['ecosystem']})",
+        f"  version:    {info.get('version') or 'unknown'}",
+        f"  repository: {info.get('repository') or 'not declared'}",
+        f"  docs:       {info.get('docs') or 'not declared'}",
+        f"  changelog:  {info.get('changelog') or 'not declared'}",
+    ]
+    for r in info.get("releases") or []:
+        lines.append(f"  release {r['tag']} ({r['published']})")
+        if r["notes_excerpt"]:
+            for line in r["notes_excerpt"].splitlines()[:6]:
+                lines.append(f"    {line[:100]}")
+        if r["url"]:
+            lines.append(f"    {r['url']}")
+    if not info.get("releases"):
+        lines.append("  releases:   none found (no GitHub repo, or no release objects)")
+    return "\n".join(lines)
+
+
 def latest_version(ecosystem, name):
     if ecosystem == "npm":
         data = _fetch_json(f"https://registry.npmjs.org/{name}/latest")

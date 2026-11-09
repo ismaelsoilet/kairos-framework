@@ -112,6 +112,59 @@ class TestCheckAndSummarize(unittest.TestCase):
         self.assertEqual(summarize(results)["major"], 0)
 
 
+class TestResearch(unittest.TestCase):
+    """Documentation lookup uses an injected fetcher, so the suite stays offline."""
+
+    def _fake(self, url):
+        if "registry.npmjs.org/next" in url:
+            return {"version": "16.4.5",
+                    "repository": {"type": "git", "url": "git+https://github.com/vercel/next.js.git"},
+                    "homepage": "https://nextjs.org"}
+        if "api.github.com/repos/vercel/next.js/releases" in url:
+            return [{"tag_name": "v16.4.5", "name": "16.4.5", "published_at": "2026-11-01T00:00:00Z",
+                     "body": "### Fixed\n- cache bug", "html_url": "https://github.com/vercel/next.js/releases/tag/v16.4.5"}]
+        if "pypi.org/pypi/pydantic" in url:
+            return {"info": {"version": "2.14.3",
+                             "project_urls": {"Source": "https://github.com/pydantic/pydantic",
+                                              "Documentation": "https://docs.pydantic.dev",
+                                              "Changelog": "https://docs.pydantic.dev/changelog"}}}
+        return None
+
+    def test_finds_repository_and_docs_for_npm(self):
+        from kairos_recon import research_package
+        info = research_package("npm", "next", fetcher=self._fake)
+        self.assertEqual(info["version"], "16.4.5")
+        self.assertEqual(info["github"], "https://github.com/vercel/next.js")
+        self.assertEqual(info["docs"], "https://nextjs.org")
+
+    def test_finds_changelog_for_pypi(self):
+        from kairos_recon import research_package
+        info = research_package("pypi", "pydantic", fetcher=self._fake)
+        self.assertEqual(info["changelog"], "https://docs.pydantic.dev/changelog")
+
+    def test_pulls_release_notes(self):
+        from kairos_recon import research_package
+        info = research_package("npm", "next", fetcher=self._fake)
+        self.assertEqual(len(info["releases"]), 1)
+        self.assertIn("cache bug", info["releases"][0]["notes_excerpt"])
+
+    def test_missing_metadata_is_reported_not_hidden(self):
+        from kairos_recon import research_package, format_research
+        info = research_package("npm", "no-such-pkg", fetcher=lambda u: None)
+        text = format_research(info)
+        self.assertIn("not declared", text)
+        self.assertIn("none found", text)
+
+    def test_repo_slug_handles_common_url_shapes(self):
+        from kairos_recon import _repo_slug
+        for url in ("git+https://github.com/vercel/next.js.git",
+                    "https://github.com/vercel/next.js",
+                    "git://github.com/vercel/next.js.git"):
+            self.assertEqual(_repo_slug(url), ("vercel", "next.js"), url)
+        self.assertIsNone(_repo_slug(""))
+        self.assertIsNone(_repo_slug("https://gitlab.com/a/b"))
+
+
 class TestNoHardcodedKnowledge(unittest.TestCase):
     """The previous scout shipped a list of 'known breaking changes'. It already
     said Next 15 while the registry said 16.4.x. This asserts the module has no
