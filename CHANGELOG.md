@@ -3,6 +3,46 @@
 All notable changes to this project. Versions before 1.2.0 are recorded here for
 the record; their published metrics are retracted (see [`RETRACTION.md`](RETRACTION.md)).
 
+## [1.3.0] — 2026-11-09
+
+A breaking release. Everything without evidence behind it was deleted.
+
+### Removed
+
+The Elastic Dial, nine lifecycle stages, git worktree isolation, mutation
+testing, harness exports, the extension registry, in-repo lessons, the
+self-update engine, token telemetry, rollback, archive and status. Also
+`kairos scout`: its live dependency check was useful but belongs in a dependency
+tool. Recoverable from git tag `pre-prune`.
+
+Seven of eight skills and three of four agents. Six stale living specs and the
+old `.kairos/changes` artifacts.
+
+Fifteen documents moved to [`docs/archive/`](docs/archive/) rather than being
+deleted. A document that made a claim should stay visible after the claim is
+retracted; the same holds for a design removed because it had no evidence.
+
+### Changed
+
+`kairos_cli.py`: 2,396 lines → ~1,150. Six commands remain — `init`, `fit`,
+`brainstorm`, `spec`, `gate`, `audit` — and every one is covered by a test that
+runs it the way a user does.
+
+### Fixed
+
+- `CODE_EXTENSIONS`, `DOC_EXTENSIONS` and `FRAUD_PATTERNS` were inside a deleted
+  block, so the scanner crashed on every call until they were restored.
+- Two help strings still pointed at `kairos worktree create` and `kairos mutate`.
+
+### Kept, with reasons
+
+| Command | Why it survives |
+| :--- | :--- |
+| `fit` | the benchmark measured 0pp gain on bugfix/refactor tickets at ~18 min cost |
+| `brainstorm` | OpenSpec's explore has no mandatory artifact; nothing records the rejected options |
+| `gate` | 7.9% of merged spec tickets did not match their own spec |
+| `audit` | only the two rules with measured precision above 67% run by default |
+
 ## [1.2.0] — 2026-11-08
 
 The release that removes claims the project could not support, and fixes the

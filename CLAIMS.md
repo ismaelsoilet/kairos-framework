@@ -12,7 +12,10 @@
 | `UNVERIFIED` | Asserted but not reproducible in this repository. |
 | `RETRACTED` | Was published as a result; was not one. Withdrawn — see `RETRACTION.md`. |
 
-**Current state (v1.2.0): there are zero `MEASURED` rows.** That is the honest state of the project. The scanner corpus and the pre-registered benchmark are the two paths to changing it.
+**Current state (v1.3.0):** the rows below are the measured record. The scanner
+corpus and the external validation are the only two that describe the tool as it
+ships; the rest is history kept for the record. `MEASURED` here means a command
+reproduces the number, not that the number is impressive.
 
 ---
 
