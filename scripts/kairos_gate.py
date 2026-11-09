@@ -294,6 +294,98 @@ def diff_stats(diff_text):
     return {"files": files, "added": added, "removed": removed}
 
 
+DEPENDENCY_LINE_RE = re.compile(
+    r'^\+?\s*["\']?[@A-Za-z0-9_./-]+["\']?\s*[:=]\s*["\'][~^>=<]*\s*\d+\.\d+'
+)
+MANIFEST_FILES = ("package.json", "requirements.txt", "pyproject.toml",
+                  "Cargo.toml", "go.mod", "Gemfile", "composer.json")
+SKIP_DIRS = ("node_modules/", "vendor/", ".git/", "dist/", "build/", ".venv/")
+
+
+def simplicity_findings(diff_text, spec, baseline_lines=200):
+    """The one Karpathy guideline a diff can actually check.
+
+    The four guidelines are: think before coding, simplicity first, surgical
+    changes, goal-driven execution. Three are already enforced elsewhere:
+    surgical changes by the no-change list and scope drift, goal-driven execution
+    by the acceptance-criteria check, and think-before-coding by the brainstorm
+    brief. Simplicity had no check at all, which is why it was the guideline most
+    often violated while everyone nodded at it.
+
+    Two mechanical proxies, both labelled as proxies:
+
+      - a dependency added to an existing manifest with no mention in the spec
+        (the guideline says no unrequested dependencies)
+      - a brand-new source file far larger than the median new file in the same
+        diff (the guideline says if 200 lines could be 50, rewrite it)
+
+    Neither can prove the code is overcomplicated. They flag the two shapes where
+    overcomplication reliably shows up, and stay silent otherwise, because a
+    false accusation of "too complex" is worse than no check.
+    """
+    findings = []
+    added = {}
+    current = ""
+    for line in diff_text.splitlines():
+        if line.startswith("+++ b/"):
+            current = line[6:].strip()
+            continue
+        if not current or any(s in current for s in SKIP_DIRS):
+            continue
+        if line.startswith("+") and not line.startswith("+++"):
+            added.setdefault(current, []).append(line[1:])
+
+    # 1. Unrequested dependency.
+    for path, lines in added.items():
+        if Path(path).name not in MANIFEST_FILES:
+            continue
+        spec_text = (spec.text + getattr(spec, "design", "") + getattr(spec, "proposal", ""))
+        for raw in lines:
+            if not DEPENDENCY_LINE_RE.match(raw):
+                continue
+            m = re.search(r'["\']?(@?[A-Za-z0-9_./-]+)["\']?\s*[:=]\s*["\']', raw)
+            if not m:
+                continue
+            name = m.group(1)
+            if name in ("name", "version", "description", "main", "type", "license"):
+                continue
+            if name.lower() in spec_text.lower():
+                continue
+            findings.append({
+                "rule": "unrequested_dependency",
+                "severity": "minor",
+                "detail": f"{name} added to {path} but never mentioned in the spec",
+                "evidence": "Karpathy guideline 2 (Simplicity First): no unrequested dependencies",
+            })
+
+    # 2. A new file much larger than the other new files in the same diff.
+    new_sizes = {p: len(ls) for p, ls in added.items()
+                 if p.endswith(CODE_EXT) and len(ls) > 0
+                 and not re.search(r"(^|/)(tests?|__tests__|spec)/", p)}
+    for p, size in new_sizes.items():
+        others = sorted(s for q, s in new_sizes.items() if q != p)
+        if not others:
+            continue
+        # Compare against the others, not the whole set: comparing a file with
+        # itself drags the median up and hides exactly the outlier we want.
+        median_others = others[len(others) // 2]
+        if size > max(baseline_lines, median_others * 3):
+            findings.append({
+                "rule": "large_new_file",
+                "severity": "minor",
+                "detail": (f"{p} adds {size} lines, more than 3x every other new "
+                           f"file in this change (median {median_others})"),
+                "evidence": "Karpathy guideline 2 (Simplicity First): if 200 lines could be 50, rewrite it",
+            })
+
+    return findings
+
+
+# Directory suffixes that mark delivered source, for the size comparison above.
+CODE_EXT = (".py", ".ts", ".js", ".tsx", ".jsx", ".go", ".rs", ".rb", ".php",
+            ".java", ".kt", ".swift", ".cs", ".c", ".cpp", ".dart")
+
+
 def _glob_match(path, pattern):
     from fnmatch import fnmatch
     return fnmatch(path, pattern) or fnmatch(path, pattern.rstrip("/") + "/*")
@@ -432,6 +524,9 @@ def gate(spec, diff_text, allow_fraud_rules=()):
             "detail": f"{v['file']}: {v['line'][:100]}",
             "evidence": v["description"],
         })
+
+    # 6. Simplicity. The only Karpathy guideline with no check anywhere else.
+    findings.extend(simplicity_findings(diff_text, spec))
 
     if any(f["severity"] == "blocker" for f in findings):
         verdict = "BLOCKED"

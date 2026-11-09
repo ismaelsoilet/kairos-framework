@@ -161,6 +161,64 @@ the report.
 
 ---
 
+## 4b. The four coding guidelines, and the correction about their source
+
+**Source:** Andrej Karpathy's post of January 2026 on LLM coding pitfalls,
+<https://x.com/karpathy/status/2015883857489522876>. The four guidelines are a
+distillation of that post, packaged as one `CLAUDE.md` by
+[multica-ai/andrej-karpathy-skills](https://github.com/multica-ai/andrej-karpathy-skills)
+(231k stars) and mirrored at `forrestchang/andrej-karpathy-skills` with identical
+content and identical install instructions.
+
+**Correction.** An earlier answer in this project said there was no Karpathy
+"list of principles" and that the attribution in `agents/kairos_worker.md` was
+unsourced. That was wrong. The post exists, the four guidelines quote it
+directly, and two independent secondary sources reproduce the quotes
+([Addy Osmani](https://addyo.substack.com/p/the-80-problem-in-agentic-coding),
+[AppSoftware timeline](https://www.appsoftware.com/blog/a-timeline-of-interesting-takes-on-agentic-ai-capability-in-software-engineering)).
+
+**What the guidelines are not:** they are not Karpathy's own framework, they were
+not written by him, and the repo is a community distillation. The README says
+"derived from" and that is accurate. Treating it as an official specification
+would be the same error as treating a popularity count as evidence.
+
+**What this project does with them.** Three of the four were already enforced by
+structure; one was not, and that is the one everyone nods at and nobody checks:
+
+| Guideline | Enforced by | Was it checked before? |
+| :--- | :--- | :--- |
+| Think Before Coding | `kairos brainstorm --check` | no — added v1.2 |
+| Simplicity First | `kairos gate`: unrequested dependency, oversized new file | no — added v1.2 |
+| Surgical Changes | `kairos gate`: no-change list, scope drift | yes |
+| Goal-Driven Execution | `kairos gate`: criteria must map to a test | yes |
+
+The simplicity check is a **proxy, not a measurement**. It flags two shapes —
+a dependency the spec never mentioned, and a new file more than 3x larger than
+every other new file in the same change. It cannot tell whether code is
+overcomplicated, and it is deliberately a `minor` finding that never blocks. A
+false accusation of "too complex" costs more than a missed one.
+
+---
+
+## 4c. Live reconnaissance replaces a hardcoded list
+
+An earlier version of `kairos scout` shipped a dictionary of packages with known
+breaking changes. It rotted exactly like the training data it was meant to
+correct: it named a major release as current that the registry had already
+superseded twice.
+
+The replacement queries npm, PyPI and crates at run time and reports the gap
+between what a manifest declares and what exists. No version number in this
+repository is stated from memory.
+
+**Limit, stated plainly:** this catches *version* drift, which is mechanical and
+verifiable. It does not catch an architectural trend, a new library that would be
+a better fit, or a change in best practice. Those require reading, and a script
+that claimed to detect them would be guessing. `kairos scout` is a version check,
+not a research assistant, and it should not be sold as one.
+
+---
+
 ## 5. The recommended stack, and why each piece is there
 
 The benchmark makes one recommendation possible without any further measurement,

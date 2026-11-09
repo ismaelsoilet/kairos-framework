@@ -304,6 +304,82 @@ class TestOpenSpecAdapter(unittest.TestCase):
             self.assertLess(score, COMPLETENESS_THRESHOLD)
 
 
+class TestSimplicity(unittest.TestCase):
+    """Karpathy guideline 2. The other three guidelines are enforced elsewhere in
+    the gate (no-change list, scope drift, acceptance criteria); this one had no
+    check at all, which is why it was the most nodded-at and least followed."""
+
+    def test_unrequested_dependency_is_flagged(self):
+        diff = """diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -10,3 +10,4 @@
+   "dependencies": {
+     "react": "19.0.0",
++    "lodash": "^4.17.0",
+   }
+"""
+        result = gate(Spec("x.md", COMPLETE_SPEC), diff)
+        rules = [f["rule"] for f in result["findings"]]
+        self.assertIn("unrequested_dependency", rules)
+
+    def test_requested_dependency_is_not_flagged(self):
+        """If the spec names it, adding it is the plan being followed."""
+        spec = COMPLETE_SPEC.replace(
+            "## Constraints", "## Constraints\nThe change adds `lodash`.")
+        diff = """diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -10,3 +10,4 @@
+   "dependencies": {
+     "react": "19.0.0",
++    "lodash": "^4.17.0",
+   }
+"""
+        result = gate(Spec("x.md", spec), diff)
+        self.assertNotIn("unrequested_dependency", [f["rule"] for f in result["findings"]])
+
+    def test_oversized_new_file_is_flagged(self):
+        big = "\n".join(f"+line_{i} = {i}" for i in range(260))
+        small = "\n".join(f"+x_{i} = {i}" for i in range(20))
+        diff = (f"diff --git a/src/huge.py b/src/huge.py\n--- /dev/null\n+++ b/src/huge.py\n"
+                f"@@ -0,0 +1,260 @@\n{big}\n"
+                f"diff --git a/src/small.py b/src/small.py\n--- /dev/null\n+++ b/src/small.py\n"
+                f"@@ -0,0 +1,20 @@\n{small}\n")
+        result = gate(Spec("x.md", COMPLETE_SPEC), diff)
+        rules = [f["rule"] for f in result["findings"]]
+        self.assertIn("large_new_file", rules,
+                      f"260 lines next to a 20-line file was not flagged: {rules}")
+
+    def test_simplicity_findings_are_minor_not_blocking(self):
+        """A style proxy must never block a delivery. Blocking is reserved for
+        contract violations."""
+        diff = """diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -10,3 +10,4 @@
+   "dependencies": {
+     "react": "19.0.0",
++    "lodash": "^4.17.0",
+   }
+"""
+        result = gate(Spec("x.md", COMPLETE_SPEC), diff)
+        dep = [f for f in result["findings"] if f["rule"] == "unrequested_dependency"]
+        self.assertTrue(dep)
+        self.assertEqual(dep[0]["severity"], "minor")
+        self.assertNotEqual(result["verdict"], "BLOCKED")
+
+    def test_node_modules_is_ignored(self):
+        diff = """diff --git a/node_modules/x/index.js b/node_modules/x/index.js
+--- /dev/null
++++ b/node_modules/x/index.js
+@@ -0,0 +1,3 @@
++a = 1
+"""
+        from kairos_gate import simplicity_findings
+        self.assertEqual(simplicity_findings(diff, Spec("x.md", COMPLETE_SPEC)), [])
+
+
 class TestDiffStats(unittest.TestCase):
     def test_counts_files_and_lines(self):
         st = diff_stats(CLEAN_DIFF)
