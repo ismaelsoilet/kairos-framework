@@ -136,19 +136,23 @@ Ele **não** pega, a partir da v1.2:
 
 Uma sonda independente com oito padrões de fraude detectou três contra a v1.1.0. O corpus em `tests/fixtures/fraud_corpus/` agora tem 43 diffs rotulados (24 fraude, 19 limpos) e reporta **recall 100%, precision 96%**.
 
-**Esse número não se transfere.** Em 255 pull requests reais já mergeados de 8 projetos open-source, a precision foi **26,9% antes das correções e 46,7% depois**. Duas das cinco regras deram **0%** em código externo. Detalhamento completo, incluindo quais regras valem a pena, em [`docs/EXTERNAL_VALIDATION.md`](docs/EXTERNAL_VALIDATION.md).
+**Esse número não se transfere.** Em 255 pull requests reais já mergeados de 8 projetos open-source, a precision foi **26,9% antes das correções e 46,7% depois**. Uma segunda onda de 4 repositórios nunca vistos (115 PRs a mais) deu **13,3%** — a primeira amostra era atipicamente disciplinada. Detalhamento em [`docs/EXTERNAL_VALIDATION.md`](docs/EXTERNAL_VALIDATION.md).
 
-Precision por regra em código externo:
+Precision por regra, nas duas ondas:
 
-| Regra | Precision |
-| :--- | ---: |
-| `weakened_test_skip` | 89% |
-| `assert_deletion` | 71% |
-| `silent_failure_empty_catch` | 17% |
-| `guard_removal` | **0%** |
-| `phantom_stub` | **0%** |
+| Regra | Onda 1 | Onda 2 |
+| :--- | ---: | ---: |
+| `assert_deletion` | 71% | **100%** |
+| `weakened_test_skip` | 89% | 67% |
+| `silent_failure_empty_catch` | 17% | **0%** |
+| `guard_removal` | **0%** | **0%** |
+| `phantom_stub` | **0%** | **0%** |
 
-As duas últimas devem ser consideradas quebradas. São contadas, estão documentadas, e não são recomendadas para uso em gate.
+O padrão não é sutil: as duas regras que **contam** coisas (asserções e funções de teste removidas) funcionam. As três que **reconhecem uma forma** em uma linha não funcionam, porque a forma é ambígua sem contexto estrutural.
+
+**Consequência, aplicada na v1.2:** três regras vêm **desligadas por padrão** (continuam implementadas e testadas; o `kairos audit` imprime quais estão off e aceita `--enable-rule`). Com o conjunto padrão, o scanner detecta **6 de 24 casos de fraude (25%)** no próprio corpus, com zero falso positivo nos 19 casos limpos.
+
+É a troca honesta: um detector estreito que costuma acertar, em vez de um amplo que costuma errar. **Não é um gate de segurança** e não deve ser vendido como um.
 
 **O scanner não exclui mais o próprio arquivo-fonte da auditoria.** Até a v1.1.0 ele excluía (`if current_file.endswith("kairos_cli.py"): continue`), o que significava que a ferramenta não conseguia auditar a ferramenta. Essa exclusão foi removida.
 

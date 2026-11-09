@@ -17,6 +17,15 @@ from kairos_cli import (
     scan_diff_text, save_state, load_state, get_kairos_dir, MUTATION_OPS
 )
 
+
+# Rules that are off by default (0% precision on external code, see
+# docs/EXTERNAL_VALIDATION.md). Tests of those rules must opt in, because the
+# default is deliberately conservative.
+ALL_RULES = (
+    "silent_failure_empty_catch", "guard_removal", "phantom_stub",
+    "weakened_assertion", "mock_substitution", "unconditional_accept",
+)
+
 class TestKairosFeatures(unittest.TestCase):
 
     def setUp(self):
@@ -46,7 +55,7 @@ class TestKairosFeatures(unittest.TestCase):
 +        # Silently bypass for now
 +        pass
 """
-        violations = scan_diff_text(diff)
+        violations = scan_diff_text(diff, enable_rules=ALL_RULES)
         fraud_types = [v["fraud_type"] for v in violations]
         self.assertIn("silent_failure_empty_catch", fraud_types)
 
@@ -62,7 +71,7 @@ class TestKairosFeatures(unittest.TestCase):
 +        // ignore error
 +    }
 """
-        violations = scan_diff_text(diff)
+        violations = scan_diff_text(diff, enable_rules=ALL_RULES)
         fraud_types = [v["fraud_type"] for v in violations]
         self.assertIn("silent_failure_empty_catch", fraud_types)
 
@@ -75,7 +84,7 @@ class TestKairosFeatures(unittest.TestCase):
 +    catch {
 +    }
 """
-        violations = scan_diff_text(diff)
+        violations = scan_diff_text(diff, enable_rules=ALL_RULES)
         fraud_types = [v["fraud_type"] for v in violations]
         self.assertIn("silent_failure_empty_catch", fraud_types)
 
@@ -115,7 +124,7 @@ class TestKairosFeatures(unittest.TestCase):
 +    # Not implemented yet
 +    return None
 """
-        violations = scan_diff_text(diff)
+        violations = scan_diff_text(diff, enable_rules=ALL_RULES)
         fraud_types = [v["fraud_type"] for v in violations]
         self.assertIn("phantom_stub", fraud_types)
 
@@ -519,7 +528,7 @@ deleted file mode 100644
 +    except Exception:
 +        None
 """
-        violations = scan_diff_text(diff_none)
+        violations = scan_diff_text(diff_none, enable_rules=ALL_RULES)
         fraud_types = [v["fraud_type"] for v in violations]
         self.assertIn("silent_failure_empty_catch", fraud_types)
 
@@ -530,7 +539,7 @@ deleted file mode 100644
 +    except Exception:
 +        return
 """
-        violations = scan_diff_text(diff_return)
+        violations = scan_diff_text(diff_return, enable_rules=ALL_RULES)
         fraud_types = [v["fraud_type"] for v in violations]
         self.assertIn("silent_failure_empty_catch", fraud_types)
 
@@ -544,7 +553,7 @@ deleted file mode 100644
 +        void 0;
 +    }
 """
-        violations = scan_diff_text(diff_void)
+        violations = scan_diff_text(diff_void, enable_rules=ALL_RULES)
         fraud_types = [v["fraud_type"] for v in violations]
         self.assertIn("silent_failure_empty_catch", fraud_types)
 

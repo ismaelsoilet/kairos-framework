@@ -17,8 +17,73 @@ scanner produziu 30 alertas. **14 eram corretos e 16 eram falsos positivos:
 precisão de 46,7%.**
 
 Na primeira execução, antes das correções que este estudo motivou, a precisão
-era **26,9%** (14 corretos em 52 alertas). Compare com os **96%** do corpus
-interno.
+era **26,9%** (14 corretos em 52 alertas).
+
+Depois disso, adicionei uma **segunda onda** de 4 repositórios nunca vistos (115
+PRs), para testar se a primeira amostra era limpa demais. Era: a precisão caiu
+para **13,3%**. Ver seção "Onda 2" abaixo.
+
+Compare tudo isso com os **96%** do corpus interno.
+
+---
+
+## Onda 2 — o teste de generalização
+
+A onda 1 foi de projetos maduros com revisão estrita. Isso levanta uma objeção
+óbvia: a amostra pode ser limpa demais para exercitar o scanner. Então adicionei
+4 repositórios (Django, click, httpx, FastAPI) **escolhidos depois de a onda 1
+ter sido reportada**, e mantidos em lista separada — fundir as ondas deixaria a
+amostra crescer na direção que favorecesse a ferramenta.
+
+| | Onda 1 (8 repos) | Onda 2 (4 repos) |
+| :--- | ---: | ---: |
+| PRs | 255 | 115 |
+| Linhas alteradas | 16.836 | 16.631 |
+| Alertas | 30 | 45 |
+| Falsos positivos | 16 | 39 |
+| **Precisão** | **46,7%** | **13,3%** |
+| PRs com alerta | 5,9% | 15,7% |
+
+A taxa de alerta **triplicou** e a precisão **caiu para um terço**. A hipótese
+estava certa: a onda 1 era atipicamente disciplinada. O número que descreve a
+ferramenta em código que ela não conhece é **13,3%** — e mesmo esse está medido
+por mim.
+
+### Por que a onda 2 é tão pior
+
+Os falsos positivos da onda 2 são quase todos a mesma coisa: **`raise
+NotImplementedError()  # pragma: nocover` em métodos abstratos**. O httpx tem
+uma camada de interfaces em que 18 dos 45 alertas são isso. Método abstrato
+levantando `NotImplementedError` não é stub inacabado — é a implementação
+correta.
+
+Segundo padrão: `def cmd(arg): pass` como corpo de um `@click.command()` dentro
+de teste. Corpo vazio de handler de teste é o objeto sob teste, não código
+incompleto.
+
+Terceiro: `except ImportError: pass` e `except LookupError: continue` — import
+opcional e retry de fallback. Ambos legítimos.
+
+### O que a onda 2 confirma
+
+Uma coisa, com clareza: **as duas regras que funcionam são as aritméticas.**
+
+| Regra | Onda 1 | Onda 2 |
+| :--- | ---: | ---: |
+| `assert_deletion` | 71% | **100%** (4/4) |
+| `weakened_test_skip` | 89% | **67%** (2/3) |
+| `silent_failure_empty_catch` | 17% | **0%** (0/10) |
+| `guard_removal` | **0%** | **0%** (0/6) |
+| `phantom_stub` | **0%** | **0%** (0/21) |
+| `weakened_assertion` | n/a | 0% (0/1) |
+
+As regras baseadas em **contar** asserções e funções de teste removidas têm
+precisão alta e estável. As baseadas em **reconhecer a forma** de um padrão em
+uma linha — stub vazio, guarda removida, catch vazio — têm precisão próxima de
+zero em código real, porque a forma é ambígua sem contexto estrutural.
+
+Isso não é um ajuste fino. É a diferença entre "isto desapareceu" (verificável)
+e "isto parece suspeito" (não verificável por regex).
 
 ---
 
@@ -175,19 +240,70 @@ tabela de aliases por linguagem, e ela envelhece.
 
 ---
 
+## O que isso significa na prática: as regras padrão
+
+Como consequência direta deste estudo, três regras passaram a vir **desligadas**.
+O `kairos audit` imprimi quais estão off e aceita `--enable-rule <nome>`.
+
+Medindo só as regras que ficam ligadas:
+
+| | Corpus interno | Código externo |
+| :--- | ---: | ---: |
+| Fraudes detectadas | **6 de 24 (25%)** | — |
+| Falsos positivos | 0 de 19 | 12 alertas em 370 PRs |
+| Precisão | 100% | ver tabela acima |
+
+**O scanner padrão detecta 25% das fraudes do próprio corpus.** Ele é preciso
+quando acerta, e acerta pouco.
+
+Isso não é um bug que eu deixei passar — é a consequência honesta de desligar o
+que não funciona. Um scanner que detecta 25% com precisão razoável é mais útil
+que um que detecta 100% do corpus e 0% no mundo real, mas **não é um gate de
+segurança**, e não deve ser vendido como um.
+
+Se o objetivo for cobertura, ligue as regras com `--enable-rule` e aceite o
+ruído. Se for confiança, mantenha o padrão e trate o resultado como um sinal
+entre vários.
+
+---
+
 ## O que eu faria a seguir, se isso fosse virar ferramenta
 
-1. **Desligar `guard_removal` e `phantom_stub` por padrão.** 0% de precisão em 8
-   alertas. Não é ajuste de limiar, é regra que não funciona.
-2. **Manter `assert_deletion` e `weakened_test_skip`.** 71% e 89%. São as únicas
-   que um mantenedor aceitaria no CI.
-3. **Reescrever `silent_failure_empty_catch`** com distinção entre cleanup,
-   compatibilidade e erro engolido. Ou desligar.
-4. **Adicionar análise de arquivo completo** para resolver o caso 30, que é o
-   único falso positivo que um humano leria como bug do scanner.
-5. **Repetir este estudo em repositórios menos disciplinados**, onde a fraude
-   que o scanner caça é mais provável de existir. Esta amostra é de projetos com
-   review forte, então provavelmente tem pouca fraude real para encontrar.
+Depois das duas ondas, a recomendação deixou de ser "ajustar limiar" e virou
+"separar o que é verificável do que é heurístico".
+
+**Manter, porque funciona em código real:**
+
+1. **`assert_deletion`** — 71% e 100% nas duas ondas. É aritmética: contar
+   asserções removidas contra adicionadas. Não depende de reconhecer forma.
+2. **`weakened_test_skip`** — 89% e 67%. Também aritmética, mais detecção de
+   `skip`/`only`/comentário, que são tokens inequívocos.
+
+Essas duas são o produto. O resto é tentativa.
+
+**Desligar por padrão, porque a precisão é zero em código real:**
+
+3. **`phantom_stub`** — 0/4 e 0/21. `raise NotImplementedError` em interface
+   abstrata, `pass` em corpo de command de teste. A forma é ambígua sem saber se
+   a classe é abstrata, se o decorator é de teste, e se o método é override.
+4. **`guard_removal`** — 0/4 e 0/6. Guarda reescrita parece guarda removida em
+   diff de uma linha. Distinguir exige ver a condição nova.
+5. **`silent_failure_empty_catch`** — 17% e 0/10. `except ImportError: pass` em
+   import opcional é a forma correta de escrever Python, e é indistinguível de
+   erro engolido sem análise de fluxo.
+
+**Reescrever com análise estrutural, ou não ter:**
+
+6. **`weakened_assertion`** — 0/1 na onda 2. A comparação de pares funciona no
+   papel, mas precisa de AST para saber o que é a expressão, não só que mudou.
+
+**Se for virar CI de verdade:**
+
+7. Só duas regras justificam um gate hoje. Um gate com cinco regras e três delas
+   em 0% de precisão é um gate que as pessoas desligam na primeira semana.
+8. Adicionar análise de arquivo completo resolve o caso do corpo fora do hunk,
+   mas não resolve as três regras de forma: elas continuam ambíguas com o
+   arquivo inteiro na mão.
 
 ---
 

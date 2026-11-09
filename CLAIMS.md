@@ -38,11 +38,14 @@
 | C-016 | `docs/EXTERNAL_VALIDATION.md` | External PR flag rate | 5.9% (15 of 255) | MEASURED | same | `scan_prs.py` | 2026-11-08 | MEASURED |
 | C-017 | `docs/EXTERNAL_VALIDATION.md` | Injection detection on real merged diffs | 30/30, injections authored knowing the rules | CASE_STUDY | `injection_test.py` | `python3 benchmark/external/injection_test.py` | 2026-11-08 | CASE_STUDY |
 | C-018 | `docs/EXTERNAL_VALIDATION.md` | R1 test-deletion detection | 8/8, near-circular (same arithmetic as the rule tested) | CASE_STUDY | `recall_estimate.py` | same pattern | 2026-11-08 | CASE_STUDY |
+| C-019 | `docs/EXTERNAL_VALIDATION.md` | Wave 2 precision, 4 never-seen repos | 13.3% (6 TP / 45 flags) | MEASURED | wave 2 sample, 115 PRs | `adjudicate_wave2.py --flags flags_w2.json` | 2026-11-08 | MEASURED |
+| C-020 | `docs/EXTERNAL_VALIDATION.md` | Wave 2 PR flag rate | 15.7% (18 of 115) | MEASURED | same | `scan_prs.py` | 2026-11-08 | MEASURED |
 
 C-014 qualifies C-008 and C-009: the internal corpus precision of 96% **does not
-transfer**. On external code it is 46.7%, and two of the five rules score 0%.
+transfer**. On external code it is 46.7%, and on never-seen repositories
+(C-019) it is 13.3%. Three of the five rules score 0% in both waves.
 
-The corpus precision describes a regression suite. The external number describes
+The corpus precision describes a regression suite. The external numbers describe
 the tool. Where they disagree, the external number is the one to plan around.
 
 Claims C-011 and C-012 are listed as `UNVERIFIED` rather than omitted: they are

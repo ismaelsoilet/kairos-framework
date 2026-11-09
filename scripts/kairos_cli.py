@@ -667,7 +667,28 @@ def _strip_inline_strings(line):
         return line
     return _INLINE_STRING_RE.sub('""', line)
 
-def scan_diff_text(diff_text, allow_files=()):
+# Rules with zero precision on external code (see docs/EXTERNAL_VALIDATION.md).
+# They stay implemented and tested, but are OFF by default: a CI gate whose alerts
+# are wrong most of the time gets disabled by its users within a week, and then the
+# good rules go with it. Enable explicitly with --enable-rule.
+#
+# Measured precision on real merged PRs, wave 1 / wave 2:
+#   assert_deletion             71% / 100%   on
+#   weakened_test_skip          89% /  67%   on
+#   silent_failure_empty_catch  17% /   0%   off
+#   guard_removal                0% /   0%   off
+#   phantom_stub                 0% /   0%   off
+#   weakened_assertion           n/a /   0%   off
+DEFAULT_OFF_RULES = frozenset({
+    "silent_failure_empty_catch",
+    "guard_removal",
+    "phantom_stub",
+    "weakened_assertion",
+    "mock_substitution",
+    "unconditional_accept",
+})
+
+def scan_diff_text(diff_text, allow_files=(), enable_rules=None):
     """Scanner for the classic LLM frauds across single and multi-line diff blocks.
 
     `allow_files` skips specific paths on request. Nothing is skipped silently:
@@ -677,6 +698,12 @@ def scan_diff_text(diff_text, allow_files=()):
     lines = diff_text.splitlines()
 
     allow_norm = {str(p).replace("\\", "/").lstrip("./") for p in allow_files}
+    enabled = set(enable_rules or ())
+
+    def _rule_on(name):
+        if name in enabled:
+            return True
+        return name not in DEFAULT_OFF_RULES
 
     current_file = ""
     old_file = ""
@@ -1029,7 +1056,8 @@ def scan_diff_text(diff_text, allow_files=()):
                             })
                         break
 
-    return violations
+    return [v for v in violations if _rule_on(v["fraud_type"])]
+
 
 def cmd_audit(args):
     root = find_repo_root()
@@ -1116,7 +1144,14 @@ def cmd_audit(args):
     if allow_files:
         print(f"⚠️  Explicitly excluded from this audit: {', '.join(allow_files)}")
 
-    violations = scan_diff_text(combined_diff, allow_files=allow_files)
+    enabled_rules = tuple(getattr(args, "enable_rule", None) or ())
+    off_rules = sorted(DEFAULT_OFF_RULES - set(enabled_rules))
+    if off_rules:
+        print(f"ℹ️  Rules disabled by default (0% external precision): {', '.join(off_rules)}")
+        print(f"    Enable with --enable-rule <name>. See docs/EXTERNAL_VALIDATION.md")
+
+    violations = scan_diff_text(combined_diff, allow_files=allow_files,
+                                enable_rules=enabled_rules)
 
     # A clean diff is not proof that the tests are strong. Require a current
     # K-Mutant report with zero survivors before granting VERIFIED.
@@ -2027,6 +2062,9 @@ def main():
     p_audit.add_argument("--root-only", action="store_true", help="Audit only repo root, ignoring active worktree")
     p_audit.add_argument("--allow-file", action="append", default=[], metavar="PATH",
                          help="Exclude a specific path from this audit (repeated; reported in the output)")
+    p_audit.add_argument("--enable-rule", action="append", default=[], metavar="NAME",
+                         help="Enable a rule that is off by default (0%% external precision). "
+                              "Repeated. See docs/EXTERNAL_VALIDATION.md")
 
     # Archive
     p_arc = subparsers.add_parser("archive", help="Promote Delta Spec to living specs")

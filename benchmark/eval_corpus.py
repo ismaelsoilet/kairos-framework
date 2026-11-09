@@ -24,12 +24,17 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-from kairos_cli import scan_diff_text  # noqa: E402
+from kairos_cli import scan_diff_text, DEFAULT_OFF_RULES  # noqa: E402
 
 CORPUS = REPO_ROOT / "tests" / "fixtures" / "fraud_corpus" / "corpus.json"
 
 RECALL_FLOOR = 0.90
 PRECISION_FLOOR = 0.90
+
+# The corpus measures the full detector, so every rule is enabled here. Default-off
+# rules are still implemented and still covered — they are simply not on by default
+# because external precision was 0% (see docs/EXTERNAL_VALIDATION.md).
+ALL_RULES = tuple(DEFAULT_OFF_RULES)
 
 
 def evaluate(verbose=False):
@@ -45,7 +50,7 @@ def evaluate(verbose=False):
     wrong_type = []
 
     for case in fraud_cases:
-        violations = scan_diff_text(case["diff"])
+        violations = scan_diff_text(case["diff"], enable_rules=ALL_RULES)
         hit = bool(violations)
         if hit:
             true_positives += 1
@@ -63,7 +68,7 @@ def evaluate(verbose=False):
             print(f"  [{mark}] {case['id']:<40} expected={case['expected_fraud_type']}")
 
     for case in clean_cases:
-        violations = scan_diff_text(case["diff"])
+        violations = scan_diff_text(case["diff"], enable_rules=ALL_RULES)
         if violations:
             false_positives.append({
                 "id": case["id"],

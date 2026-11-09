@@ -23,7 +23,7 @@ import re
 import subprocess
 from pathlib import Path
 
-REPOS = [
+WAVE1 = [
     ("psf/requests", "Python"),
     ("pallets/flask", "Python"),
     ("pytest-dev/pytest", "Python"),
@@ -33,6 +33,20 @@ REPOS = [
     ("chalk/chalk", "JavaScript"),
     ("psf/black", "Python"),
 ]
+
+# Wave 2, declared AFTER wave 1 was complete and its results reported. Kept in a
+# separate list on purpose: pooling it with wave 1 would let the sample grow in
+# whichever direction looked better, which is the bias the pre-registration
+# forbids. Wave 2 exists to test one hypothesis — that wave 1's sample was
+# unusually disciplined — and is reported separately.
+WAVE2 = [
+    ("django/django", "Python"),
+    ("pallets/click", "Python"),
+    ("encode/httpx", "Python"),
+    ("tiangolo/fastapi", "Python"),
+]
+
+REPOS = WAVE1
 
 BOT_RE = re.compile(r"(dependabot|pre-commit-ci|renovate|github-actions|snyk-bot|mergify)",
                     re.IGNORECASE)
@@ -61,13 +75,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--repos-dir", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--wave", choices=["1", "2"], default="1")
     args = ap.parse_args()
 
+    repo_list = WAVE1 if args.wave == "1" else WAVE2
     repos_dir = Path(args.repos_dir)
     all_prs = []
     manifest = []
 
-    for full_name, language in REPOS:
+    for full_name, language in repo_list:
         local = repos_dir / full_name.replace("/", "_")
         if not local.is_dir():
             manifest.append({"repo": full_name, "status": "missing_clone"})

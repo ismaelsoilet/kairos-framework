@@ -136,19 +136,23 @@ It **does not** catch, as of v1.2:
 
 An independent probe of eight fraud patterns detected three against v1.1.0. The corpus under `tests/fixtures/fraud_corpus/` now holds 43 labelled diffs (24 fraud, 19 clean) and reports **recall 100%, precision 96%**.
 
-**That number does not transfer.** Over 255 real merged pull requests from 8 open-source projects, precision was **26.9% before fixes and 46.7% after**. Two of the five rules scored **0%** on external code. Full breakdown, including which rules are worth keeping, in [`docs/EXTERNAL_VALIDATION.md`](docs/EXTERNAL_VALIDATION.md).
+**That number does not transfer.** Over 255 real merged pull requests from 8 open-source projects, precision was **26.9% before fixes and 46.7% after**. Then a second wave of 4 never-seen repositories (115 more PRs) scored **13.3%** — the first sample was unusually disciplined. Full breakdown in [`docs/EXTERNAL_VALIDATION.md`](docs/EXTERNAL_VALIDATION.md).
 
-Precision by rule on external code:
+Precision by rule, both waves:
 
-| Rule | Precision |
-| :--- | ---: |
-| `weakened_test_skip` | 89% |
-| `assert_deletion` | 71% |
-| `silent_failure_empty_catch` | 17% |
-| `guard_removal` | **0%** |
-| `phantom_stub` | **0%** |
+| Rule | Wave 1 | Wave 2 |
+| :--- | ---: | ---: |
+| `assert_deletion` | 71% | **100%** |
+| `weakened_test_skip` | 89% | 67% |
+| `silent_failure_empty_catch` | 17% | **0%** |
+| `guard_removal` | **0%** | **0%** |
+| `phantom_stub` | **0%** | **0%** |
 
-The last two should be considered broken. They are counted, they are documented, and they are not recommended for use in a gate.
+The pattern is not subtle: the two rules that **count** things (assertions and test functions removed) work. The three that **recognize a shape** in a single line do not, because the shape is ambiguous without structural context.
+
+**Consequence, applied in v1.2:** three rules ship **off by default** (they remain implemented and tested; `kairos audit` prints which are off and accepts `--enable-rule`). With the default set, the scanner detects **6 of 24 fraud cases (25%)** in its own corpus, with zero false positives on the 19 clean cases.
+
+That is the honest trade: a narrow detector that is usually right, instead of a broad one that is usually wrong. **It is not a security gate** and should not be sold as one.
 
 **The scanner no longer excludes its own source file from auditing.** Through v1.1.0 it did (`if current_file.endswith("kairos_cli.py"): continue`), which meant the tool could not audit the tool. That exclusion is gone.
 
