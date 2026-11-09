@@ -1,26 +1,24 @@
 {
   "name": "kairos",
   "id": "kairos-framework",
-  "displayName": "KAIROS SDLC",
-  "version": "1.2.0",
-  "description": "Process governance for AI coding agents: risk classification, delta specs, isolated worktrees, strict TDD, mutation testing and adversarial diff auditing. No token-savings claims — see RETRACTION.md.",
+  "displayName": "KAIROS",
+  "version": "1.3.0",
+  "description": "The checks a coding agent cannot do for itself: does the ticket need a spec, was the alternative considered, does the diff match the spec, did the change weaken a test.",
   "repository": "https://github.com/ismaelsoilet/kairos-framework",
   "author": {
     "name": "Ismael Soilet",
     "email": "dev@kairos-sdlc.org"
   },
   "keywords": [
-    "sdlc",
-    "agentic",
-    "tdd",
-    "diff-audit",
-    "mutation-testing",
     "spec-driven",
+    "verification",
+    "diff-audit",
+    "anti-hallucination",
     "guardrails"
   ],
   "suggestedPrompts": [
-    "/kairos:start Add a new feature with KAIROS governance",
-    "/kairos:dial Classify complexity for this task",
-    "/kairos:audit Run adversarial inspection on the current diff"
+    "/kairos Should this ticket have a spec?",
+    "/kairos Check this diff against its spec",
+    "/kairos Did this change weaken any tests?"
   ]
 }

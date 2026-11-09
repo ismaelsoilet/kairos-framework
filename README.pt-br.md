@@ -1,144 +1,116 @@
 # KAIROS (καιρός)
 
-### Uma camada de governança de processo para agentes de código — specs, TDD, mutation testing e auditoria de diff
+### As verificações que um agente de código não consegue fazer sozinho
 
 > **"A medida exata, no momento oportuno."**
 >
-> Sobre o nome: *kairos* é a palavra grega para o momento certo, em oposição a *chronos*, mero tempo decorrido. O projeto honrou mal esse nome no primeiro ano. Veja abaixo.
+> *kairos* é a palavra grega para o momento certo. O projeto honrou mal esse nome
+> no primeiro ano. Veja a nota de retratação abaixo.
 
 [![Licença: Apache-2.0](https://img.shields.io/badge/Licen%C3%A7a-Apache%202.0-blue.svg)](LICENSE)
 [![Python: 3.10+](https://img.shields.io/badge/Python-3.10%2B-green.svg)](https://python.org)
-[![Versão: 1.2.0](https://img.shields.io/badge/Vers%C3%A3o-1.2.0-blueviolet.svg)](plugin.json)
+[![Versão: 1.3.0](https://img.shields.io/badge/Vers%C3%A3o-1.3.0-blueviolet.svg)](plugin.json)
 
 ---
 
 > ## ⚠️ Nota de retratação (2026-11-08)
 >
-> As versões até a v1.1.0 publicaram percentuais de economia de tokens, taxas de sucesso e resultados de "benchmark empírico" nesta página. **Aqueles números não eram medidos.** Eram constantes escritas dentro dos scripts de benchmark e impressas como se fossem observações.
+> As versões até a v1.1.0 publicaram percentuais de economia de tokens, taxas de
+> sucesso e resultados de "benchmark empírico" nesta página. **Aqueles números não
+> eram medidos.** Eram constantes escritas dentro dos scripts de benchmark e
+> impressas como se fossem observações.
 >
-> **Todos estão retirados.** Leia [`RETRACTION.md`](RETRACTION.md) para a lista completa, o mecanismo por trás de cada um e o que era de fato verdadeiro.
->
-> Este README não contém mais nenhuma alegação quantitativa de desempenho, porque nenhuma atualmente atende ao padrão de evidência que o projeto exige de terceiros. Alegações podem voltar quando carregarem um artefato reproduzível — ver [`CLAIMS.md`](CLAIMS.md).
+> **Todos estão retirados.** Leia [`RETRACTION.md`](RETRACTION.md) para a lista
+> completa, o mecanismo por trás de cada um e o que era de fato verdadeiro.
 
 **Idiomas:** Português (Brasil, este arquivo) · [English](README.md)
 
 ---
 
-## O que o KAIROS é
+## O que isto é
 
-O KAIROS é um conjunto de convenções mais uma CLI em Python sem dependências que impõe um processo disciplinado a um agente de código:
+Quatro comandos fazem o que um modelo não consegue fazer raciocinando:
 
-- classificar o risco da tarefa antes de trabalhar
-- escrever uma delta spec antes de escrever código
-- implementar dentro de um `git worktree` isolado
-- escrever o teste que falha primeiro
-- mutar a implementação e confirmar que os testes a capturam
-- varrer o `git diff` resultante em busca de sinais de que o agente trapaceou
-- arquivar a spec e registrar a lição
-
-Ele não gera código. Não chama modelo. Não tem opinião sobre qual modelo você usa. É a parte que se recusa a aceitar a palavra do agente.
-
-Tudo abaixo está implementado em `scripts/kairos_cli.py` ou marcado como não implementado. Essa distinção é o ponto da v1.2.
-
----
-
-## Status das capacidades
-
-Camadas honestas. Se a capacidade está na terceira coluna, não planeje em cima dela.
-
-### Implementado e coberto por testes
-
-| Capacidade | Comando | Evidência de teste |
+| Comando | Pergunta que responde | Por que o modelo não consegue |
 | :--- | :--- | :--- |
-| Estado do projeto, escrita atômica, lock reentrante | `init`, `status` | `atomic_state_save`, `state_file_locking_context_manager` |
-| Classificação de risco (por palavra-chave) | `dial` | `dial_security_and_financial_prioritization` |
-| Scaffold de delta spec (5 arquivos) | `spec` | `spec_name_sanitization_rejects_path_traversal` |
-| Varredura de fraude no diff | `audit` | 15 testes de scanner (positivos e negativos) |
-| Reconhecimento de manifestos | `scout` | `scout_detects_cutoff_risk_packages`, `scout_cli_execution` |
-| Descoberta de skills e agentes | `registry` | `registry_discovers_agents_and_skills` |
-| Lições no repositório | `lesson add/list` | `lesson_add_and_list` |
+| `kairos fit` | este ticket merece uma spec? | ele não conhece sua curva de custo medida |
+| `kairos brainstorm` | o que rejeitamos, e o que provaria isto errado? | ele esquece a conversa que teve |
+| `kairos gate` | o diff cumpre a spec aprovada? | a spec está fora do contexto dele |
+| `kairos audit` | a mudança enfraqueceu algum teste? | isso é alegação, não observação |
 
-### Implementado, sem teste
+`init` e `spec` são andaimes.
 
-`worktree create/remove/list`, `archive`, `export`, `rollback`, o motor `mutate` de ponta a ponta (só a tabela de operadores é verificada) e a renderização de `status --dashboard`. Listados aqui de propósito: um comando sair com código 0 não é evidência de que funciona.
+Ele não gera código, não chama modelo, não escolhe modelo. É a parte que se
+recusa a aceitar a palavra do agente.
 
-### Documentado, não implementado
+**A v1.3 removeu o resto.** O Dial Elástico, quatro personas de agente, nove
+estágios de ciclo de vida, git worktrees, mutation testing, exportação para
+harnesses, registro de extensões, lições no repositório e motor de
+auto-atualização foram todos apagados. Nenhum tinha evidência por trás, e o
+classificador em especial tomava decisões confiantes que não conseguia justificar.
+Os dezesseis documentos deles estão em [`docs/archive/`](docs/archive/), não
+apagados — apagar um documento que fez uma alegação é como a alegação desaparece.
 
-- **`kairos drift`** — citado por `skills/kairos-sync/SKILL.md` e `docs/AGENT_LESSONS.md`. O subcomando não existe. Removido da documentação na v1.2 até ser implementado ou removido de vez.
-- **Aplicação de blast radius** — `docs/ARCHITECTURE.md` afirmava que o scanner comparava os arquivos tocados com os caminhos declarados em `tasks.md`. Não compara. Scope creep é responsabilidade de revisão, não recurso do scanner, até ser implementado.
-- **`invoke_subagent(...)`** — aparece como código em duas skills. É um primitivo do harness, não fornecido por este repositório. As skills agora dizem isso explicitamente.
-
----
-
-## As cinco leis de ferro
-
-De [`rules/kairos-core.md`](rules/kairos-core.md):
-
-1. **Nenhum código de produção sem um teste que falha.** Se você não viu o teste falhar, você não sabe o que ele testa.
-2. **Nenhum chute na depuração.** Reproduza o defeito em um teste mínimo antes de tocar no código de produção.
-3. **A verdade é o `git diff`.** Alegações não são evidência. Saída de comando e inspeção de diff são.
-4. **Cace as seis fraudes clássicas** — checks enfraquecidos, conclusão falsa, scope creep, ação não autorizada, traição de spec, debris.
-5. **Especificações vivas.** Trabalho concluído arquiva sua spec em `.kairos/specs/`.
-
-A lei 3 é a que este projeto violou mais profundamente, e a razão da retratação no topo desta página.
+`kairos scout` também saiu. Ele consultava npm, PyPI e crates para gaps de versão
+ao vivo, o que era genuinamente útil, mas isso pertence a uma ferramenta de
+dependências, não aqui. É recuperável do histórico do git na tag `pre-prune`.
 
 ---
 
-## O Dial Elástico
+## O ciclo
 
-Três profundidades de processo, escolhidas pelo classificador em `dial`:
+```bash
+kairos fit --touches 4 --criteria 5      # isto merece uma spec?
+kairos brainstorm --new dark_mode        # três alternativas e um falsificador
+openspec propose dark-mode               # a spec (o OpenSpec cuida disso)
+# ... implemente ...
+kairos gate --spec openspec/changes/dark-mode/specs/ui/spec.md \
+            --base main --verify "pytest -q"
+```
 
-| Modo | Indicado para | Pipeline | Subagentes | Alvo de orçamento |
-| :--- | :--- | :--- | :--- | :--- |
-| **Alpha** | UI, texto, layout, CSS, edições pequenas | micro-delta na mesma conversa, edição cirúrgica, checagem de sanidade do diff | 0 | pequeno |
-| **Beta** | novo endpoint, mudança de lógica, bugfix | recon → delta spec → worktree → TDD estrito → varredura de diff | 1 | médio |
-| **Gamma** | auth, pagamentos, migrações, lógica central | recon → spec + crítico de contexto zero → worktree → TDD → mutation testing → auditoria adversarial | até 3 | grande |
-
-**Limitação conhecida, dita sem rodeio:** a classificação é casamento de palavras-chave sobre a descrição da tarefa (`ALPHA_KEYWORDS` / `GAMMA_KEYWORDS` em `kairos_cli.py`). Ela não sabe quais arquivos você vai tocar, qual o tamanho do diff, nem se a área tem cobertura de teste. Consequências:
-
-- Um ajuste de CSS que mencione "balance" classifica como **Gamma**.
-- `--force-beta` não sobrepõe uma palavra-chave Gamma (correção em andamento).
-- Os números de orçamento são alvos de planejamento, não medições. O KAIROS não mede seu consumo de tokens. Ver "Telemetria".
-
-Um roteador de risco baseado em sinais objetivos — caminhos alterados, tamanho do diff, cobertura de teste da área, histórico de incidentes — é a versão honesta dessa ideia e ainda não está construído. Ver [`docs/OPPORTUNITIES.md`](docs/OPPORTUNITIES.md).
+Exit code é `0` só em READY, então entra num pre-push hook.
 
 ---
 
-## As quatro personas
+## O que o gate verifica
 
-| Agente | Papel | O que ele realmente faz |
-| :--- | :--- | :--- |
-| `kairos_scout` | Technology Scout | Lê manifestos de dependência e sinaliza pacotes com histórico de quebra de API. Nada além disso. |
-| `kairos_critic` | Crítico Goldfish | Revisa uma spec sem contexto de conversa, para não ser convencido a concordar. |
-| `kairos_worker` | Executor Cirúrgico | TDD dentro de uma worktree; toca apenas os arquivos declarados. |
-| `kairos_auditor` | Auditor de Diff | Reexecuta comandos, inspeciona o diff, reporta evidência. O veredito dele vale o que vale o scanner — leia as limitações abaixo antes de confiar. |
+| Verificação | Veredito |
+| :--- | :--- |
+| Spec cobre menos de 6 das 8 seções medidas | **BLOCKED** |
+| Um arquivo da lista de no-change foi modificado | **BLOCKED** |
+| `--verify "<cmd>"` sai diferente de zero, ou estoura timeout | **BLOCKED** |
+| Arquivos tocados que a spec nunca nomeou | REPAIR |
+| Critérios de aceite sem teste no diff | REPAIR |
+| Um debugger interativo (`breakpoint()`, `pdb`) adicionado | REPAIR |
+| `git push`, `npm publish`, `terraform apply` adicionado | REPAIR — precisa de autorização |
+| Deleção de teste ou teste enfraquecido | REPAIR |
+| Uma dependência que a spec nunca mencionou | menor |
+| Um arquivo novo 3x maior que todos os outros novos | menor |
+
+Sem `--verify`, o relatório imprime `verification: NOT RUN — so 'tests pass' is a
+claim`. Ele não insinua que os testes rodaram.
+
+`brainstorm` recusa um brief com menos de três alternativas, com uma alternativa
+sem motivo de rejeição, ou sem a seção "o que provaria isto errado". Uma spec sem
+alternativas registradas não é uma decisão.
+
+### O que ele não faz
+
+- Compara **palavras, não significado**. Um teste nomeado como um critério mas que
+  não afirma nada passa na checagem de drift.
+- **Não roda seus testes** a menos que você passe `--verify`.
+- Não distingue uma deleção intencional de uma fraudulenta.
+- Três regras do scanner vêm **desligadas por padrão** (precisão medida 0–17%).
+- Lê specs em português e inglês. Outros idiomas pontuam baixo, e isso é uma
+  limitação do verificador, não um julgamento da spec.
 
 ---
 
-## O que o scanner realmente pega
+## O histórico medido do scanner
 
-`scan_diff_text()` roda expressões regulares sobre as linhas adicionadas de um `git diff`. Ele captura de forma confiável as formas **literais** de:
-
-- testes pulados, focados ou comentados (`test.skip`, `xit`, `@pytest.mark.skip`, `// assert ...`)
-- handlers de exceção vazios ou engolidos (`except: pass`, `catch (e) {}`)
-- stubs retornando constantes triviais (`def f(): pass`, `return null;`)
-- asserções tautológicas (`assert True`, `assert 1 == 1`, `expect(true).toBeTruthy()`)
-- deleção líquida de asserções ou de funções de teste
-- identificadores de modelo obsoletos em código
-
-Ele **não** pega, a partir da v1.2:
-
-- uma asserção enfraquecida no lugar (`assert x == 'valid'` → `assert x is not None`)
-- um handler que registra o erro e então retorna sucesso
-- um mock substituindo a unidade sob teste
-- uma função de validação que retorna `True` incondicionalmente
-- uma guarda removida
-
-Uma sonda independente com oito padrões de fraude detectou três contra a v1.1.0. O corpus em `tests/fixtures/fraud_corpus/` agora tem 43 diffs rotulados (24 fraude, 19 limpos) e reporta **recall 100%, precision 96%**.
-
-**Esse número não se transfere.** Em 255 pull requests reais já mergeados de 8 projetos open-source, a precision foi **26,9% antes das correções e 46,7% depois**. Uma segunda onda de 4 repositórios nunca vistos (115 PRs a mais) deu **13,3%** — a primeira amostra era atipicamente disciplinada. Detalhamento em [`docs/EXTERNAL_VALIDATION.md`](docs/EXTERNAL_VALIDATION.md).
-
-Precision por regra, nas duas ondas:
+Uma sonda independente com oito padrões de fraude detectou três contra a v1.1.0.
+Em **370 pull requests reais já mergeados** de 12 projetos open-source, com 75
+alertas adjudicados individualmente:
 
 | Regra | Onda 1 | Onda 2 |
 | :--- | ---: | ---: |
@@ -148,33 +120,20 @@ Precision por regra, nas duas ondas:
 | `guard_removal` | **0%** | **0%** |
 | `phantom_stub` | **0%** | **0%** |
 
-O padrão não é sutil: as duas regras que **contam** coisas (asserções e funções de teste removidas) funcionam. As três que **reconhecem uma forma** em uma linha não funcionam, porque a forma é ambígua sem contexto estrutural.
+O padrão não é sutil: as duas regras que **contam** coisas funcionam. As três que
+**reconhecem uma forma** em uma linha não funcionam, porque a forma é ambígua sem
+contexto estrutural.
 
-**Consequência, aplicada na v1.2:** três regras vêm **desligadas por padrão** (continuam implementadas e testadas; o `kairos audit` imprime quais estão off e aceita `--enable-rule`). Com o conjunto padrão, o scanner detecta **6 de 24 casos de fraude (25%)** no próprio corpus, com zero falso positivo nos 19 casos limpos.
+Com o conjunto padrão, o scanner detecta **6 de 24 casos de fraude (25%)** no
+próprio corpus, com zero falso positivo nos 19 casos limpos. Ele é preciso quando
+dispara e dispara pouco. **Não é um gate de segurança.**
 
-É a troca honesta: um detector estreito que costuma acertar, em vez de um amplo que costuma errar. **Não é um gate de segurança** e não deve ser vendido como um.
-
-**O scanner não exclui mais o próprio arquivo-fonte da auditoria.** Até a v1.1.0 ele excluía (`if current_file.endswith("kairos_cli.py"): continue`), o que significava que a ferramenta não conseguia auditar a ferramenta. Essa exclusão foi removida.
-
----
-
-## Telemetria: o que ela mede e o que não mede
-
-A linha de status é assim:
-
-```text
-⚡ [KAIROS | Stage: BUILDING | Mode: BETA | Budget: 65,000 | Spent: UNMEASURED]
-```
-
-`Stage` e `Mode` vêm de `.kairos/state.json`. `Budget` é um alvo de planejamento.
-
-`Spent` é **`UNMEASURED`** até você importar dados reais de uso com `kairos token import --usage <log.jsonl>`, que lê contagens reais de tokens de input/output/cache e custo de um log de harness, e registra o hash do arquivo-fonte junto. Até a v1.1.0 o campo era preenchido por `kairos token add <n>` — o agente incrementando o próprio contador, que é exatamente o modo de falha que este projeto diz detectar. Esse comando foi removido.
-
-Se nada foi medido, o status diz isso. Não imprime zero para você inferir que zero tokens foram gastos.
+Detalhamento completo, incluindo o que foi descartado:
+[`docs/EXTERNAL_VALIDATION.md`](docs/EXTERNAL_VALIDATION.md).
 
 ---
 
-## Instalação e primeiro uso
+## Instalação
 
 Requer Python 3.10+. Sem dependências.
 
@@ -182,27 +141,17 @@ Requer Python 3.10+. Sem dependências.
 git clone https://github.com/ismaelsoilet/kairos-framework
 cd seu-projeto
 python3 /caminho/para/kairos-framework/scripts/kairos_cli.py init
-python3 /caminho/para/kairos-framework/scripts/kairos_cli.py dial "adicionar retry no webhook de pagamento"
 ```
 
 ### Referência de comandos
 
 ```bash
-kairos init                                     # cria .kairos/ e state.json
-kairos dial "<tarefa>" [--force-alpha|--force-beta|--force-gamma]
-kairos scout [--all] [--save-spec]              # reconhecimento de manifestos
-kairos spec <nome>                              # delta spec de 5 arquivos
-kairos worktree create|remove|list <nome>
-kairos mutate <arquivo> --test "<cmd>" [--max-mutants N] [--timeout S]
-kairos audit --base main [--worktree PATH|--root-only]
-kairos archive <change_id>
-kairos rollback [--worktree PATH|--root-only]
-kairos status [--dashboard|--header-only]
-kairos token import --usage <log.jsonl>
-kairos lesson add|list
-kairos registry
-kairos export <claude|cursor|agents|universal|all>
-kairos update [--skip-self-test]
+kairos init                                    # cria .kairos/
+kairos fit --touches N --criteria N [--crosses-boundary] [--changes-schema-or-api]
+kairos brainstorm --new <nome> | --check <caminho>
+kairos spec <nome>                             # spec de oito seções
+kairos gate --spec <caminho> [--base main] [--verify "<cmd>"] [--json]
+kairos audit [--base main] [--enable-rule NOME]
 ```
 
 ---
@@ -211,30 +160,52 @@ kairos update [--skip-self-test]
 
 ```text
 kairos-framework/
-├── RETRACTION.md              # o que foi alegado, por que estava errado
-├── CLAIMS.md                  # toda alegação quantitativa viva + artefato
-├── rules/kairos-core.md       # diretrizes e as cinco leis de ferro
-├── agents/                    # personas scout, critic, worker, auditor
-├── skills/                    # 7 skills de protocolo (dial, spec, build, judge, …)
-├── scripts/kairos_cli.py      # a CLI sem dependências
+├── RETRACTION.md                  # o que foi alegado, por que estava errado
+├── CLAIMS.md                      # toda alegação viva + seu artefato
+├── scripts/
+│   ├── kairos_cli.py              # a CLI
+│   ├── kairos_gate.py             # verificação spec <-> diff
+│   └── kairos_brainstorm.py       # alternativas antes do compromisso
 ├── tests/
-│   └── fixtures/fraud_corpus/ # diffs rotulados (fraude vs limpo) + veredito esperado
-├── benchmark/
-│   ├── PREREGISTRATION.md     # escrito antes da coleta de dados
-│   └── case_study_gemini_n1/  # uma execução real, reclassificada como estudo de caso
-└── docs/                      # arquitetura, lições, oportunidades
+│   ├── test_gate.py
+│   ├── test_brainstorm.py
+│   └── fixtures/fraud_corpus/     # diffs rotulados + veredito esperado
+├── skills/kairos/SKILL.md         # o protocolo voltado ao agente
+├── agents/kairos_critic.md        # revisor de contexto zero
+├── rules/kairos-core.md           # as cinco leis de ferro
+└── docs/
+    ├── EVIDENCE.md                # leia primeiro: cada regra e sua fonte
+    ├── EXTERNAL_VALIDATION.md     # 370 PRs, adjudicados
+    ├── OPPORTUNITIES.md           # o que vale construir, o que não vale
+    └── archive/                   # o ciclo v1.2, mantido como registro
 ```
 
 ---
 
 ## Documentação
 
-- [`RETRACTION.md`](RETRACTION.md) — as alegações retiradas e o mecanismo por trás de cada uma.
-- [`CLAIMS.md`](CLAIMS.md) — o livro-razão. Todo número neste repositório precisa de uma linha.
-- [`docs/OPPORTUNITIES.md`](docs/OPPORTUNITIES.md) — que partes disto vale construir para outras pessoas, e o que não vale.
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — como as peças se encaixam.
-- [`docs/AGENT_LESSONS.md`](docs/AGENT_LESSONS.md) — heurísticas de comportamento, sem alegações de desempenho.
-- [`docs/case-studies/GEMINI_N1.md`](docs/case-studies/GEMINI_N1.md) — uma execução, os dois braços, incluindo a falha de desenho.
+- [`docs/EVIDENCE.md`](docs/EVIDENCE.md) — **leia primeiro.** Cada regra ligada a uma fonte, com as limitações dessa fonte, e o que não é tratado como evidência.
+- [`docs/EXTERNAL_VALIDATION.md`](docs/EXTERNAL_VALIDATION.md) — 370 PRs reais, 75 alertas adjudicados, e quais regras sobreviveram.
+- [`RETRACTION.md`](RETRACTION.md) — as alegações retiradas na v1.2 e o mecanismo por trás de cada uma.
+- [`CLAIMS.md`](CLAIMS.md) — o livro-razão. Todo número precisa de uma linha com artefato.
+- [`docs/OPPORTUNITIES.md`](docs/OPPORTUNITIES.md) — que partes disto vale construir para outros, e o que não vale.
+
+Dezesseis documentos que descreviam o ciclo da v1.2 foram para
+[`docs/archive/`](docs/archive/) quando esse ciclo foi removido na v1.3, incluindo
+o estudo de caso da execução única do Gemini.
+
+---
+
+## É um back end, não um framework
+
+Use **uma** ferramenta de spec do começo ao fim — o OpenSpec é a melhor escolha
+medida (42/50 mergeados, 2,4% de drift, fase de spec mais rápida em 12 min). O
+`kairos gate` fica atrás dele, e atrás dos layouts EGM, Spec Kit ou KAIROS
+igualmente.
+
+Ele não substitui sua ferramenta de spec e não afirma que o formato dele é
+melhor: o benchmark não encontrou diferença significativa entre nenhum deles
+(banda de ruído de ±10pp).
 
 ---
 
@@ -242,4 +213,6 @@ kairos-framework/
 
 Apache License 2.0 — ver [`LICENSE`](LICENSE).
 
-Construído por Ismael Soilet, com assistência de IA. A assistência de IA escreveu algumas das alegações que precisaram ser retratadas; a retratação foi escrita com as mesmas ferramentas e conferida contra a saída observada.
+Construído por Ismael Soilet, com assistência de IA. A assistência de IA escreveu
+algumas das alegações que precisaram ser retratadas; a retratação foi escrita com
+as mesmas ferramentas e conferida contra a saída observada.

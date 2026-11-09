@@ -160,8 +160,9 @@ TEMPLATE = """# Brainstorm: {name}
      could actually happen. "It doesn't work" is not an answer. -->
 
 ## Live versions checked
-<!-- Run `kairos scout` and paste what it found for the packages involved. This
-     is the one section that must come from a command, not from memory. -->
+<!-- Run whatever dependency checker you trust (`npm outdated`, `pip list
+     --outdated`, Dependabot) and paste what it found for the packages involved.
+     This is the one section that must come from a command, not from memory. -->
 """
 
 
