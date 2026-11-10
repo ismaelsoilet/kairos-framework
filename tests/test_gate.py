@@ -729,6 +729,52 @@ class TestIncrementalScan(unittest.TestCase):
         self.assertEqual(len(matches), 1, f"reported {len(matches)} times")
 
 
+class TestInit(unittest.TestCase):
+    """`init` wrote only two gitignore lines, so a single `gate` or `audit` run
+    left gate_latest.json and recon_latest.json untracked in the first real
+    project this ran in. Run artefacts must not appear as project changes."""
+
+    def _run(self, argv, cwd):
+        import subprocess
+        script = Path(__file__).resolve().parent.parent / "scripts" / "kairos_cli.py"
+        return subprocess.run([sys.executable, str(script)] + argv,
+                              capture_output=True, text=True, timeout=60, cwd=cwd)
+
+    def test_init_covers_run_artifacts(self):
+        import tempfile, subprocess
+        with tempfile.TemporaryDirectory() as tmp:
+            subprocess.run(["git", "init", "-q", "-b", "main"], cwd=tmp, check=True)
+            Path(tmp, ".gitignore").write_text("node_modules/\n", encoding="utf-8")
+            r = self._run(["init"], tmp)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            content = Path(tmp, ".gitignore").read_text(encoding="utf-8")
+            for pattern in (".kairos/worktrees/", ".kairos/*_latest.json",
+                            ".kairos/*.patch", ".kairos/*.lock"):
+                self.assertIn(pattern, content,
+                              f"init did not ignore {pattern}")
+            self.assertIn("node_modules/", content,
+                          "init destroyed the existing gitignore")
+
+    def test_init_is_idempotent(self):
+        import tempfile, subprocess
+        with tempfile.TemporaryDirectory() as tmp:
+            subprocess.run(["git", "init", "-q", "-b", "main"], cwd=tmp, check=True)
+            Path(tmp, ".gitignore").write_text("node_modules/\n", encoding="utf-8")
+            self._run(["init"], tmp)
+            first = Path(tmp, ".gitignore").read_text(encoding="utf-8")
+            self._run(["init"], tmp)
+            second = Path(tmp, ".gitignore").read_text(encoding="utf-8")
+            self.assertEqual(first, second, "a second init duplicated the block")
+
+    def test_init_without_existing_gitignore(self):
+        import tempfile, subprocess
+        with tempfile.TemporaryDirectory() as tmp:
+            subprocess.run(["git", "init", "-q", "-b", "main"], cwd=tmp, check=True)
+            self._run(["init"], tmp)
+            content = Path(tmp, ".gitignore").read_text(encoding="utf-8")
+            self.assertIn(".kairos/*_latest.json", content)
+
+
 class TestDiffStats(unittest.TestCase):
     def test_counts_files_and_lines(self):
         st = diff_stats(CLEAN_DIFF)

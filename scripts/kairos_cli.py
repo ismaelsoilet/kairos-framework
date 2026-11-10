@@ -152,13 +152,26 @@ def cmd_init(args):
     state = load_state(root)
     save_state(state, root)
 
-    # Gitignore for worktrees and temporary state
+    # Gitignore for run artefacts. These are outputs of a check, not project
+    # files: leaving them untracked filled `git status` in the first real project
+    # this ran in, with gate_latest.json and recon_latest.json appearing after a
+    # single verification.
     gitignore = root / ".gitignore"
-    if gitignore.exists():
-        content = gitignore.read_text(encoding="utf-8")
-        if ".kairos/worktrees" not in content:
-            with open(gitignore, "a", encoding="utf-8") as f:
-                f.write("\n# KAIROS Local Isolation & State\n.kairos/worktrees/\n.kairos/active_diff.patch\n")
+    wanted = [
+        ".kairos/worktrees/",
+        ".kairos/active_diff.patch",
+        ".kairos/*_latest.json",
+        ".kairos/*.patch",
+        ".kairos/*.lock",
+        ".kairos/.*.lock",
+    ]
+    existing = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
+    missing = [line for line in wanted if line not in existing]
+    if missing:
+        with open(gitignore, "a", encoding="utf-8") as f:
+            if "# KAIROS Local Isolation & State" not in existing:
+                f.write("\n# KAIROS Local Isolation & State\n")
+            f.write("\n".join(missing) + "\n")
 
     print(f"✅ KAIROS initialized successfully at: {k_dir}")
     print("📁 Structure:")
